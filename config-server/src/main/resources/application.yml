@@ -11,6 +11,8 @@ spring:
           uri: ${CONFIG_GIT_URI:file://${user.home}/config-repo}
           default-label: main
           clone-on-start: true
+          username: ${GITHUB_CONFIG_SERVER:}
+          password: ${GITHUB_CONFIG_SERVER:}
 
 eureka:
   client:

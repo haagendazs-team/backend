@@ -11,6 +11,75 @@ ext {
     set('javaVersion', '25')
 }
 
+// 실행 순서: config-server → discovery → gateway → 도메인 서비스
+def startOrder = [
+    'config-server',
+    'discovery',
+    'gateway',
+    'member',
+    'payment',
+    'search',
+    'notification'
+]
+
+task startAll {
+    group = 'application'
+    description = '전체 서비스를 순서대로 백그라운드 실행 (./gradlew startAll)'
+    dependsOn startOrder.collect { ":${it}:bootJar" }
+
+    doLast {
+        // .env 파일 파싱 → 환경변수 맵
+        def envVars = [:]
+        def envFile = file("${rootDir}/.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                if (line && !line.startsWith('#') && line.contains('=')) {
+                    def (key, value) = line.split('=', 2)
+                    envVars[key.trim()] = value.trim()
+                }
+            }
+        }
+
+        def logDir = file("${rootDir}/logs")
+        logDir.mkdirs()
+
+        startOrder.each { svc ->
+            def jar = file("${rootDir}/${svc}/build/libs/${svc}-0.0.1-SNAPSHOT.jar")
+            def log = file("${logDir}/${svc}.log")
+            println "Starting ${svc}..."
+            def pb = new ProcessBuilder('java', '-jar', jar.absolutePath)
+                .redirectOutput(log)
+                .redirectErrorStream(true)
+                .directory(rootDir)
+            pb.environment().putAll(envVars)
+            pb.start()
+            // config-server, discovery는 뜰 시간 확보
+            if (svc in ['config-server', 'discovery']) {
+                sleep(8000)
+            }
+        }
+        println "\n모든 서비스 기동 완료. 로그: ${logDir}"
+        println "Eureka: http://localhost:8761"
+        println "Gateway: http://localhost:8080"
+    }
+}
+
+task stopAll {
+    group = 'application'
+    description = '실행 중인 전체 서비스 종료 (./gradlew stopAll)'
+
+    doLast {
+        def ports = [8888, 8761, 8080, 8081, 8082, 8083, 8084]
+        ports.each { port ->
+            def result = "lsof -ti:${port}".execute().text.trim()
+            if (result) {
+                "kill ${result}".execute()
+                println "Stopped port ${port} (PID ${result})"
+            }
+        }
+    }
+}
+
 subprojects {
     apply plugin: 'java'
     apply plugin: 'io.spring.dependency-management'
