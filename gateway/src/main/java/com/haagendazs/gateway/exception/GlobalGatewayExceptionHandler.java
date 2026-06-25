@@ -6,7 +6,7 @@ import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.common.exception.ErrorCode;
 import com.haagendazs.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
+import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
