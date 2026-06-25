@@ -1,0 +1,21 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+// gateway — Spring Cloud Gateway (WebFlux/Netty 기반 API 게이트웨이)
+// common 모듈 의존: GlobalExceptionHandler AutoConfiguration 적용 불가 (WebFlux 환경)
+//   → gateway 전용 GlobalGatewayExceptionHandler를 별도 구현 (ErrorWebExceptionHandler)
+// Rate Limiting: Redis 기반 RequestRateLimiter 필터 사용
+//   → RateLimiterConfig에서 KeyResolver 빈 등록 필수
+// CircuitBreaker: Resilience4j 리액티브 모듈 사용
+dependencies {
+    implementation project(':common')
+
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+}
