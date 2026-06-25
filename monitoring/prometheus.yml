@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: haagendazs-backend-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - was-blue:8090               # active 슬롯 — CI/CD가 active-upstream.conf 읽어서 교체
+          # - 10.0.0.x:8090             # prod (EC2-1 내부 IP, management port)

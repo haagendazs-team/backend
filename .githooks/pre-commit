@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# .env 파일이 스테이징에 포함되면 커밋을 차단한다
+
+BLOCKED=$(git diff --cached --name-only | grep -E '(^|/)\.env(\..+)?$' | grep -v '\.env\.example$')
+
+if [ -n "$BLOCKED" ]; then
+  echo ""
+  echo "  [BLOCKED] .env 파일은 커밋할 수 없습니다."
+  echo ""
+  echo "  차단된 파일:"
+  echo "$BLOCKED" | sed 's/^/    /'
+  echo ""
+  echo "  .env 파일에는 비밀키, DB 비밀번호 등 민감 정보가 포함되어 있습니다."
+  echo "  커밋하려면 git restore --staged <파일> 로 스테이징에서 제거하세요."
+  echo ""
+  exit 1
+fi
+
+exit 0

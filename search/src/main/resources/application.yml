@@ -1,0 +1,44 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: search
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}?currentSchema=search
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration
+    schemas: search
+    table: flyway_schema_history
+  elasticsearch:
+    uris: http://${ES_HOST:localhost}:${ES_PORT:9200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  health:
+    elasticsearch:
+      # ES 8.13.x + Spring Data Elasticsearch media_type_header_exception 호환 이슈
+      # 도메인 기능은 정상이므로 health indicator만 비활성화
+      enabled: false
+  metrics:
+    tags:
+      application: search
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true

@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: Redis
+    type: redis-datasource
+    access: proxy
+    url: ${REDIS_GRAFANA_URL}
+    secureJsonData:
+      password: ${REDIS_PASSWORD}
+    editable: false

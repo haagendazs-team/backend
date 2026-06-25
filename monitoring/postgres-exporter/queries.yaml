@@ -1,0 +1,33 @@
+pg_stat_statements:
+  query: |
+    SELECT
+      d.datname,
+      s.queryid::text AS queryid,
+      LEFT(s.query, 100)  AS query,
+      s.calls,
+      s.total_exec_time / NULLIF(s.calls, 0) AS mean_exec_time_ms,
+      s.rows
+    FROM pg_stat_statements s
+    JOIN pg_database d ON d.oid = s.dbid
+    WHERE s.calls > 0
+  master: true
+  cache_seconds: 30
+  metrics:
+    - datname:
+        usage: "LABEL"
+        description: "Database name"
+    - queryid:
+        usage: "LABEL"
+        description: "Query ID"
+    - query:
+        usage: "LABEL"
+        description: "Query text (truncated)"
+    - calls:
+        usage: "GAUGE"
+        description: "Number of times executed"
+    - mean_exec_time_ms:
+        usage: "GAUGE"
+        description: "Mean execution time in milliseconds"
+    - rows:
+        usage: "GAUGE"
+        description: "Total rows returned or affected"
