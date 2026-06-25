@@ -73,7 +73,6 @@ docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -
 ### 5. 서비스 실행
 
 ```bash
-export $(grep -v '^#' .env | xargs)
 ./gradlew startAll
 ```
 

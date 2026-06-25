@@ -28,6 +28,18 @@ task startAll {
     dependsOn startOrder.collect { ":${it}:bootJar" }
 
     doLast {
+        // .env 파일 파싱 → 환경변수 맵
+        def envVars = [:]
+        def envFile = file("${rootDir}/.env")
+        if (envFile.exists()) {
+            envFile.eachLine { line ->
+                if (line && !line.startsWith('#') && line.contains('=')) {
+                    def (key, value) = line.split('=', 2)
+                    envVars[key.trim()] = value.trim()
+                }
+            }
+        }
+
         def logDir = file("${rootDir}/logs")
         logDir.mkdirs()
 
@@ -35,11 +47,12 @@ task startAll {
             def jar = file("${rootDir}/${svc}/build/libs/${svc}-0.0.1-SNAPSHOT.jar")
             def log = file("${logDir}/${svc}.log")
             println "Starting ${svc}..."
-            new ProcessBuilder('java', '-jar', jar.absolutePath)
+            def pb = new ProcessBuilder('java', '-jar', jar.absolutePath)
                 .redirectOutput(log)
                 .redirectErrorStream(true)
                 .directory(rootDir)
-                .start()
+            pb.environment().putAll(envVars)
+            pb.start()
             // config-server, discovery는 뜰 시간 확보
             if (svc in ['config-server', 'discovery']) {
                 sleep(8000)
