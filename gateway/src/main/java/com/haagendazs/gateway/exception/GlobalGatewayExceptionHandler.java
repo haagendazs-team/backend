@@ -39,8 +39,10 @@ public class GlobalGatewayExceptionHandler implements ErrorWebExceptionHandler {
             return ApiResponse.fail(businessException.getErrorCode());
         }
         if (ex instanceof ResponseStatusException responseStatusException) {
-            return ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR,
-                    responseStatusException.getReason());
+            String reason = responseStatusException.getReason();
+            return reason != null
+                    ? ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR, reason)
+                    : ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR);
         }
         return ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR);
     }
