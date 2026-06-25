@@ -72,20 +72,44 @@ docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -
 
 ### 5. 서비스 실행
 
+#### 자동 실행 (전체)
+
 ```bash
 ./gradlew startAll
 ```
 
-로그는 `logs/` 디렉토리에 서비스별로 저장됩니다.
+- `.env`를 자동으로 읽어 환경변수 주입
+- 실행 순서: config-server → discovery → gateway → 도메인 서비스
+- 로그: `logs/{서비스명}.log`
 
 ```bash
 tail -f logs/gateway.log
 ```
 
-종료 시:
+종료:
 
 ```bash
 ./gradlew stopAll
+```
+
+#### 수동 실행 (개별)
+
+특정 서비스만 띄우거나 디버깅할 때 사용합니다.
+
+```bash
+# 환경변수 로드
+export $(grep -v '^#' .env | xargs)
+
+# 실행 순서 준수
+java -jar config-server/build/libs/config-server-0.0.1-SNAPSHOT.jar
+java -jar discovery/build/libs/discovery-0.0.1-SNAPSHOT.jar
+java -jar gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
+
+# 도메인 서비스 (순서 무관)
+java -jar member/build/libs/member-0.0.1-SNAPSHOT.jar
+java -jar payment/build/libs/payment-0.0.1-SNAPSHOT.jar
+java -jar search/build/libs/search-0.0.1-SNAPSHOT.jar
+java -jar notification/build/libs/notification-0.0.1-SNAPSHOT.jar
 ```
 
 ### 6. 동작 확인
