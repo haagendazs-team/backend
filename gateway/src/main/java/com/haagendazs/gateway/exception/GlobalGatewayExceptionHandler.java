@@ -16,7 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-@Order(-1)
+@Order(-2)
 @Component
 @RequiredArgsConstructor
 public class GlobalGatewayExceptionHandler implements ErrorWebExceptionHandler {
