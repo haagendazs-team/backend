@@ -1,0 +1,10 @@
+// common — 라이브러리 모듈 (Spring Boot 앱 아님, bootJar 비활성화됨)
+// AutoConfiguration 등록: META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+//   현재 등록된 빈: GlobalExceptionHandler (MVC 전용 @RestControllerAdvice)
+//   → gateway(WebFlux)에서는 동작하지 않음 — gateway는 GlobalGatewayExceptionHandler 사용
+// web/validation은 compileOnly: 의존하는 서비스가 직접 선언해야 함
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    compileOnly 'org.springframework.boot:spring-boot-starter-validation'
+    compileOnly 'org.springframework.boot:spring-boot-starter-web'
+}

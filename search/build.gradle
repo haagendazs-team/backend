@@ -1,0 +1,22 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+// search 서비스 — MVC(Tomcat) 기반 검색 도메인
+// DB: PostgreSQL (스키마: search) + Elasticsearch 이중 사용
+// ORM: Spring Data JPA (PostgreSQL) + Spring Data Elasticsearch
+// 마이그레이션: Flyway V{n}__{설명}.sql — 추가만 가능, 수정 금지
+// Elasticsearch 인덱스 관리는 Flyway 대상 아님 — 별도 초기화 로직 구현
+dependencies {
+    implementation project(':common')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+    runtimeOnly 'org.postgresql:postgresql'
+}
