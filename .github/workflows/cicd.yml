@@ -103,7 +103,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml,docker-compose.infra.yml,nginx/nginx.conf,nginx/proxy_headers.conf,monitoring/prometheus.yml,monitoring/grafana/provisioning,monitoring/grafana/dashboards"
+          source: "docker-compose.prod.yml,docker-compose.monitoring.yml,nginx/nginx.conf,nginx/proxy_headers.conf,monitoring/prometheus.yml,monitoring/grafana/provisioning,monitoring/grafana/dashboards"
           target: "~/"
           overwrite: true
 
@@ -127,9 +127,9 @@ jobs:
             docker network create sportsify-net 2>/dev/null || true
 
             # 인프라 기동
-            if ! docker compose -f ~/docker-compose.infra.yml --env-file ~/.env up -d; then
+            if ! docker compose -f ~/docker-compose.prod.yml --env-file ~/.env up -d; then
               echo "인프라 기동 실패"
-              docker compose -f ~/docker-compose.infra.yml --env-file ~/.env down
+              docker compose -f ~/docker-compose.prod.yml --env-file ~/.env down
               exit 1
             fi
 
