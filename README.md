@@ -70,28 +70,24 @@ docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -
 ./gradlew bootJar
 ```
 
-### 5. 서비스 실행 순서
-
-인프라가 healthy 상태가 된 후 아래 순서로 실행합니다.
+### 5. 서비스 실행
 
 ```bash
-# 1) Config Server
-java -jar config-server/build/libs/config-server-0.0.1-SNAPSHOT.jar
-
-# 2) Discovery (Eureka)
-java -jar discovery/build/libs/discovery-0.0.1-SNAPSHOT.jar
-
-# 3) Gateway
-java -jar gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
-
-# 4) 도메인 서비스 (순서 무관)
-java -jar member/build/libs/member-0.0.1-SNAPSHOT.jar
-java -jar payment/build/libs/payment-0.0.1-SNAPSHOT.jar
-java -jar search/build/libs/search-0.0.1-SNAPSHOT.jar
-java -jar notification/build/libs/notification-0.0.1-SNAPSHOT.jar
+export $(grep -v '^#' .env | xargs)
+./gradlew startAll
 ```
 
-> 환경 변수는 실행 전 `export $(grep -v '^#' .env | xargs)` 또는 IDE Run Configuration에 `.env` 파일을 등록하여 주입합니다.
+로그는 `logs/` 디렉토리에 서비스별로 저장됩니다.
+
+```bash
+tail -f logs/gateway.log
+```
+
+종료 시:
+
+```bash
+./gradlew stopAll
+```
 
 ### 6. 동작 확인
 
