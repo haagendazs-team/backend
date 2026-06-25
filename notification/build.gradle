@@ -1,0 +1,32 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+// notification 서비스 — WebFlux(Netty) + R2DBC(논블로킹 PostgreSQL)
+// JPA/Hibernate 사용 금지: Netty 이벤트 루프에서 블로킹 JDBC 호출은 스레드 고갈을 유발함
+// 엔티티: @Table (Spring Data R2DBC) 사용, @Entity (JPA) 사용 금지
+// Repository: ReactiveCrudRepository 또는 R2dbcRepository 상속
+// 트랜잭션: @Transactional (org.springframework.transaction) 사용 가능 — R2DBC TransactionManager가 처리
+dependencies {
+    implementation project(':common')
+
+    // WebFlux (Netty 런타임)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+
+    // R2DBC (논블로킹 PostgreSQL 드라이버)
+    implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+    implementation 'org.postgresql:r2dbc-postgresql'
+
+    // Redis (Reactive)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+
+    // Flyway — R2DBC와 공존 가능, 스키마 마이그레이션 전용 (JDBC URL 별도 설정 필요)
+    implementation 'org.flywaydb:flyway-core'
+    // Flyway는 내부적으로 JDBC를 사용하므로 JDBC 드라이버를 런타임에 추가
+    runtimeOnly 'org.postgresql:postgresql'
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+}
