@@ -27,6 +27,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  health:
+    elasticsearch:
+      # ES 8.13.x + Spring Data Elasticsearch media_type_header_exception 호환 이슈
+      # 도메인 기능은 정상이므로 health indicator만 비활성화
+      enabled: false
   metrics:
     tags:
       application: search

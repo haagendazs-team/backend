@@ -6,6 +6,7 @@ import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.common.exception.ErrorCode;
 import com.haagendazs.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @Order(-2)
 @Component
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class GlobalGatewayExceptionHandler implements ErrorWebExceptionHandler {
 
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
+        log.error("Gateway exception [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         ApiResponse<Void> body = resolveBody(ex);
         HttpStatus status = resolveStatus(ex);
 

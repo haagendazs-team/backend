@@ -16,60 +16,64 @@ spring:
 
   cloud:
     gateway:
-      discovery:
-        locator:
-          # false: 명시적 routes만 유효. true이면 /serviceId/** 경로가 자동 생성되어
-          # 모든 서비스 내부 API가 게이트웨이 필터 없이 이중 노출됨
-          enabled: false
-      routes:
-        - id: notification-service
-          uri: lb://notification
-          predicates:
-            - Path=/api/notifications/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                # ipKeyResolver 빈은 RateLimiterConfig에서 등록
-                key-resolver: "#{@ipKeyResolver}"
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
+      # Spring Cloud Gateway 5.x (Boot 4.x): 라우트 키가 server.webflux 하위로 이동
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false
+          routes:
+            - id: notification-service
+              uri: lb://notification
+              predicates:
+                - Path=/api/notifications/**
+              filters:
+                - StripPrefix=2
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
 
-        - id: search-service
-          uri: lb://search
-          predicates:
-            - Path=/api/search/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@ipKeyResolver}"
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                redis-rate-limiter.requestedTokens: 1
+            - id: search-service
+              uri: lb://search
+              predicates:
+                - Path=/api/search/**
+              filters:
+                - StripPrefix=2
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 30
+                    redis-rate-limiter.burstCapacity: 60
+                    redis-rate-limiter.requestedTokens: 1
 
-        - id: payment-service
-          uri: lb://payment
-          predicates:
-            - Path=/api/payments/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@ipKeyResolver}"
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
+            - id: payment-service
+              uri: lb://payment
+              predicates:
+                - Path=/api/payments/**
+              filters:
+                - StripPrefix=2
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
 
-        - id: member-service
-          uri: lb://member
-          predicates:
-            - Path=/api/members/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                key-resolver: "#{@ipKeyResolver}"
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
+            - id: member-service
+              uri: lb://member
+              predicates:
+                - Path=/api/members/**
+              filters:
+                - StripPrefix=2
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
 
 management:
   endpoints:
