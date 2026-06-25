@@ -1,0 +1,12 @@
+rootProject.name = 'haagendazs-backend'
+
+include(
+    'config-server',
+    'discovery',
+    'gateway',
+    'common',
+    'notification',
+    'search',
+    'payment',
+    'member'
+)

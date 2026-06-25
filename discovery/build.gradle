@@ -1,0 +1,9 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-server'
+    // JDK 11+ 에서 Eureka Server 구동 시 필요
+    runtimeOnly 'org.glassfish.jaxb:jaxb-runtime'
+}

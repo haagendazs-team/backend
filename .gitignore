@@ -1,0 +1,31 @@
+# Env / Secrets
+.env
+.env.*
+!.env.example
+
+# Gradle
+.gradle/
+build/
+*/build/
+*/out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spring Boot
+HELP.md
+
+# Logs
+*.log
+logs/
+/claude.md
+/.claude/
+/.superpowers/
