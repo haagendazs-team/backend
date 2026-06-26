@@ -13,6 +13,9 @@ spring:
     password: ${POSTGRES_PASSWORD}
     properties:
       schema: chat
+    pool:
+      initial-size: ${R2DBC_POOL_INITIAL:2}
+      max-size: ${R2DBC_POOL_MAX:5}
 
   flyway:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
