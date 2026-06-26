@@ -1,7 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.repository.EventTypeRepository;
 import com.haagendazs.infrastructure.config.RedisPubSubConfig;
@@ -36,18 +36,18 @@ public class EventTypeRegistrationService {
             int scheduledOffsetMinutes
     ) {
         if (!STREAM_KEY_PATTERN.matcher(streamKey).matches()) {
-            return Mono.error(new BusinessException(ErrorCode.EVENT_TYPE_STREAM_KEY_INVALID));
+            return Mono.error(new BusinessException(NotificationErrorCode.EVENT_TYPE_STREAM_KEY_INVALID));
         }
         return eventTypeRepository.existsByCode(code)
                 .flatMap(codeExists -> {
                     if (codeExists) {
-                        return Mono.<Boolean>error(new BusinessException(ErrorCode.EVENT_TYPE_DUPLICATE));
+                        return Mono.<Boolean>error(new BusinessException(NotificationErrorCode.EVENT_TYPE_DUPLICATE));
                     }
                     return eventTypeRepository.existsByStreamKey(streamKey);
                 })
                 .flatMap(streamKeyExists -> {
                     if (streamKeyExists) {
-                        return Mono.<EventTypeDefinition>error(new BusinessException(ErrorCode.EVENT_TYPE_DUPLICATE));
+                        return Mono.<EventTypeDefinition>error(new BusinessException(NotificationErrorCode.EVENT_TYPE_DUPLICATE));
                     }
                     EventTypeDefinition definition = EventTypeDefinition.of(
                             code, streamKey, isScheduled, isSingleTarget,

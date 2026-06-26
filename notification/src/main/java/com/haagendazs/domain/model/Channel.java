@@ -1,7 +1,7 @@
 package com.haagendazs.domain.model;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,7 +53,7 @@ public class Channel {
 
     public void validateOwner(Long memberId) {
         if (!Objects.equals(this.memberId, memberId)) {
-            throw new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND);
+            throw new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND);
         }
     }
 

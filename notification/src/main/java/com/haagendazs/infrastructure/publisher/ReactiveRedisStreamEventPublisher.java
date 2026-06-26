@@ -2,7 +2,7 @@ package com.haagendazs.infrastructure.publisher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +34,7 @@ public class ReactiveRedisStreamEventPublisher {
             return Mono.empty();
         }
         String streamKey = registry.getByCode(eventTypeCode)
-                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_TYPE_NOT_FOUND))
+                .orElseThrow(() -> new BusinessException(NotificationErrorCode.EVENT_TYPE_NOT_FOUND))
                 .getStreamKey();
         return Flux.fromIterable(payloads)
                 .flatMap(p -> {

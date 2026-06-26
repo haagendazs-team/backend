@@ -3,7 +3,7 @@ package com.haagendazs.gateway.exception;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.common.exception.CommonErrorCode;
 import com.haagendazs.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,10 +44,10 @@ public class GlobalGatewayExceptionHandler implements ErrorWebExceptionHandler {
         if (ex instanceof ResponseStatusException responseStatusException) {
             String reason = responseStatusException.getReason();
             return reason != null
-                    ? ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR, reason)
-                    : ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR);
+                    ? ApiResponse.fail(CommonErrorCode.INTERNAL_SERVER_ERROR, reason)
+                    : ApiResponse.fail(CommonErrorCode.INTERNAL_SERVER_ERROR);
         }
-        return ApiResponse.fail(ErrorCode.INTERNAL_SERVER_ERROR);
+        return ApiResponse.fail(CommonErrorCode.INTERNAL_SERVER_ERROR);
     }
 
     private HttpStatus resolveStatus(Throwable ex) {
