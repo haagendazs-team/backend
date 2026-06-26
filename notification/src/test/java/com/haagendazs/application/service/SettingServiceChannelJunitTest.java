@@ -50,14 +50,14 @@ class SettingServiceChannelJunitTest {
     @DisplayName("getChannels — 활성 채널 목록을 반환한다")
     void getChannels_returnsEnabledChannels() {
         Channel ch1 = Channel.create(1L, ChannelType.EMAIL, "a@b.com");
-        Channel ch2 = Channel.create(1L, ChannelType.SLACK, "@user");
+        Channel ch2 = Channel.create(1L, ChannelType.EMAIL, "b@b.com");
         when(channelRepository.findByMemberIdAndEnabledTrue(1L)).thenReturn(Flux.just(ch1, ch2));
 
         List<ChannelResult> results = settingService.getChannels(1L).collectList().block();
 
         assertThat(results).hasSize(2);
         assertThat(results).extracting(ChannelResult::channelType)
-                .containsExactlyInAnyOrder(ChannelType.EMAIL, ChannelType.SLACK);
+                .containsOnly(ChannelType.EMAIL);
     }
 
     @Test
@@ -76,12 +76,12 @@ class SettingServiceChannelJunitTest {
     @Test
     @DisplayName("registerChannel — 채널 최대 수 초과 시 LIMIT_EXCEEDED 예외 발생")
     void registerChannel_limitExceeded_throwsLimitExceeded() {
-        when(channelRepository.existsByMemberIdAndChannelType(1L, ChannelType.SLACK)).thenReturn(Mono.just(false));
+        when(channelRepository.existsByMemberIdAndChannelType(1L, ChannelType.EMAIL)).thenReturn(Mono.just(false));
         when(channelRepository.countByMemberId(1L)).thenReturn(Mono.just(2L));
         when(properties.channel()).thenReturn(channelProperties);
         when(channelProperties.maxPerMember()).thenReturn(2);
 
-        Mono<ChannelResult> result = settingService.registerChannel(1L, ChannelType.SLACK, "@user");
+        Mono<ChannelResult> result = settingService.registerChannel(1L, ChannelType.EMAIL, "c@b.com");
 
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)

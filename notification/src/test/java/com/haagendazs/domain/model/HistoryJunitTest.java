@@ -21,10 +21,10 @@ class HistoryJunitTest {
     @Test
     @DisplayName("History.failed 시 status=FAILED, isFailed=true, errorMessage 설정됨")
     void failed_statusIsFailed() {
-        History history = History.failed(1L, ChannelType.SLACK, "timeout");
+        History history = History.failed(1L, ChannelType.EMAIL, "timeout");
 
         assertThat(history.getNotificationId()).isEqualTo(1L);
-        assertThat(history.getChannelType()).isEqualTo(ChannelType.SLACK);
+        assertThat(history.getChannelType()).isEqualTo(ChannelType.EMAIL);
         assertThat(history.getStatus()).isEqualTo(SendStatus.FAILED);
         assertThat(history.isFailed()).isTrue();
         assertThat(history.getErrorMessage()).isEqualTo("timeout");
