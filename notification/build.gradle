@@ -1,5 +1,15 @@
 plugins {
     id 'org.springframework.boot'
+    id 'jacoco'
+}
+
+// sportsify 원본 파일은 검토용 staging 폴더 (java/)이므로 컴파일에서 제외
+sourceSets {
+    main {
+        java {
+            exclude 'java/**'
+        }
+    }
 }
 
 // notification 서비스 — WebFlux(Netty) + R2DBC(논블로킹 PostgreSQL)
@@ -30,4 +40,66 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    // Email (블로킹 IO — Dispatcher에서 boundedElastic()으로 래핑)
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+    // Validation
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Jackson for ObjectMapper
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Scheduling
+    implementation 'org.springframework.boot:spring-boot-starter'
+}
+
+jacoco {
+    toolVersion = '0.8.15'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    // 커버리지에서 제외: 인프라 어댑터, 설정 클래스, 엔트리포인트, 통합환경 의존 서비스
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                'com/haagendazs/NotificationApplication.class',
+                // infrastructure — 외부 의존성 직접 연동
+                'com/haagendazs/infrastructure/repository/**',
+                'com/haagendazs/infrastructure/config/**',
+                'com/haagendazs/infrastructure/slack/**',
+                'com/haagendazs/infrastructure/scheduler/**',
+                'com/haagendazs/infrastructure/publisher/**',
+                'com/haagendazs/infrastructure/sse/**',
+                'com/haagendazs/infrastructure/sender/**',
+                'com/haagendazs/infrastructure/redis/**',
+                // presentation — 컨트롤러 계층
+                'com/haagendazs/presentation/**',
+                // application — 포트/리스너/발신자
+                'com/haagendazs/application/listener/**',
+                'com/haagendazs/application/port/**',
+                'com/haagendazs/application/sender/**',
+                // 통합환경(Redis/DB/Mail) 의존 서비스 — 단위 테스트 범위 외
+                'com/haagendazs/application/service/Dispatcher.class',
+                'com/haagendazs/application/service/BulkPersistService.class',
+                'com/haagendazs/application/service/FanoutService.class',
+                'com/haagendazs/application/service/SlackCommandService.class',
+                'com/haagendazs/application/service/BufferedChunkService.class',
+                'com/haagendazs/application/service/NotificationBatchBuffer.class',
+                'com/haagendazs/application/service/EventStatusService.class',
+                'com/haagendazs/application/service/NotificationService.class',
+                'com/haagendazs/application/service/ScheduledNotificationProcessor.class',
+                'com/haagendazs/application/service/ScheduledEventClaimService.class',
+                'com/haagendazs/application/service/ChunkService.class',
+                'com/haagendazs/application/service/SingleTargetResult.class',
+                'com/haagendazs/infrastructure/consumer/PelMessageProcessor.class',
+                'com/haagendazs/infrastructure/consumer/StreamMaintenanceScheduler.class',
+            ])
+        }))
+    }
 }

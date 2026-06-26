@@ -10,7 +10,6 @@ import com.haagendazs.domain.model.ChannelType;
 import com.haagendazs.domain.model.SettingEntry;
 import com.haagendazs.domain.repository.ChannelRepository;
 import com.haagendazs.domain.repository.SettingEntryRepository;
-import com.haagendazs.domain.repository.SettingRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,6 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class SettingService {
 
-    private final SettingRepository settingRepository;
     private final SettingEntryRepository settingEntryRepository;
     private final ChannelRepository channelRepository;
     private final EventTypeRegistry eventTypeRegistry;
