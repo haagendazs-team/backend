@@ -8,7 +8,6 @@ import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.model.SettingEntry;
 import com.haagendazs.domain.repository.ChannelRepository;
 import com.haagendazs.domain.repository.SettingEntryRepository;
-import com.haagendazs.domain.repository.SettingRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,9 +32,6 @@ class SettingServiceJunitTest {
 
     @InjectMocks
     private SettingService settingService;
-
-    @Mock
-    private SettingRepository settingRepository;
 
     @Mock
     private SettingEntryRepository settingEntryRepository;
