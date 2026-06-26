@@ -6,6 +6,7 @@ include(
     'gateway',
     'common',
     'notification',
+    'chat',
     'search',
     'payment',
     'member'

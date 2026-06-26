@@ -69,16 +69,19 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-localhost}:9092
+      # INTERNAL: 컨테이너 간 통신 (kafka:29092), EXTERNAL: 호스트 프로세스 (localhost:9092)
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://${KAFKA_ADVERTISED_HOST:-localhost}:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     volumes:
@@ -100,6 +103,7 @@ services:
     container_name: haagendazs-config-server
     environment:
       - GITHUB_CONFIG_SERVER=${GITHUB_CONFIG_SERVER}
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8888:8888"
     healthcheck:
@@ -116,6 +120,7 @@ services:
     container_name: haagendazs-discovery
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8761:8761"
     depends_on:
@@ -141,6 +146,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - FRONT_URI=${FRONT_URI}
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8080:8080"
     depends_on:
@@ -166,7 +172,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8081:8081"
     depends_on:
@@ -193,8 +200,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-haagendazs}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JWT_SECRET=${JWT_SECRET}
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8082:8082"
     depends_on:
@@ -219,7 +227,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-haagendazs}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8083:8083"
     depends_on:
@@ -246,13 +255,45 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - ES_HOST=elasticsearch
       - ES_PORT=9200
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8084:8084"
     depends_on:
       discovery:
         condition: service_healthy
       elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chat:
+    build:
+      context: ./chat
+      dockerfile: Dockerfile
+    container_name: haagendazs-chat
+    environment:
+      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - CONFIG_SERVER_URI=http://config-server:8888
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-haagendazs}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JAVA_TOOL_OPTIONS=-Xmx256m
+    ports:
+      - "8085:8085"
+    depends_on:
+      discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
