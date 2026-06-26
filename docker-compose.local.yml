@@ -168,7 +168,6 @@ services:
     build:
       context: ./notification
       dockerfile: Dockerfile
-    container_name: haagendazs-notification
     mem_limit: 384m
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
@@ -183,8 +182,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JAVA_TOOL_OPTIONS=-Xmx256m
-    ports:
-      - "8081:8081"
+    expose:
+      - "8081"
     depends_on:
       discovery:
         condition: service_healthy
@@ -199,7 +198,6 @@ services:
     build:
       context: ./member
       dockerfile: Dockerfile
-    container_name: haagendazs-member
     mem_limit: 384m
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
@@ -212,8 +210,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JWT_SECRET=${JWT_SECRET}
       - JAVA_TOOL_OPTIONS=-Xmx256m
-    ports:
-      - "8082:8082"
+    expose:
+      - "8084"
     depends_on:
       discovery:
         condition: service_healthy
@@ -226,7 +224,6 @@ services:
     build:
       context: ./payment
       dockerfile: Dockerfile
-    container_name: haagendazs-payment
     mem_limit: 384m
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
@@ -238,8 +235,8 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JAVA_TOOL_OPTIONS=-Xmx256m
-    ports:
-      - "8083:8083"
+    expose:
+      - "8083"
     depends_on:
       discovery:
         condition: service_healthy
@@ -252,7 +249,6 @@ services:
     build:
       context: ./search
       dockerfile: Dockerfile
-    container_name: haagendazs-search
     mem_limit: 384m
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
@@ -266,8 +262,8 @@ services:
       - ES_PORT=9200
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JAVA_TOOL_OPTIONS=-Xmx256m
-    ports:
-      - "8084:8084"
+    expose:
+      - "8082"
     depends_on:
       discovery:
         condition: service_healthy
@@ -280,7 +276,6 @@ services:
     build:
       context: ./chat
       dockerfile: Dockerfile
-    container_name: haagendazs-chat
     mem_limit: 384m
     environment:
       - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
@@ -295,8 +290,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - JAVA_TOOL_OPTIONS=-Xmx256m
-    ports:
-      - "8085:8085"
+    expose:
+      - "8085"
     depends_on:
       discovery:
         condition: service_healthy
