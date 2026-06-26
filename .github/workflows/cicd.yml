@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -61,6 +62,21 @@ jobs:
           JSON=$(echo "$CHANGED_MODULES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
           echo "modules=$JSON" >> "$GITHUB_OUTPUT"
           echo "Modules to test: $JSON"
+
+      - name: Label PR with changed modules
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          MODULES=$(echo '${{ steps.changed.outputs.modules }}' | jq -r '.[]')
+          for MODULE in $MODULES; do
+            # 라벨 없으면 생성
+            gh label create "$MODULE" --repo "$REPO" --color "0075ca" 2>/dev/null || true
+            # PR에 라벨 추가
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$MODULE"
+          done
 
   build:
     runs-on: ubuntu-latest
