@@ -13,6 +13,7 @@ public class RedisPubSubConfig {
     public static final String SCHEDULED_TRIGGER_CHANNEL = "notification:scheduled:trigger";
     public static final String STUCK_RECOVERY_CHANNEL = "notification:stuck:trigger";
     public static final String EVENT_TYPE_REGISTERED_CHANNEL = "notification:eventtype:registered";
+    public static final String SSE_BROADCAST_CHANNEL = "notification:sse:send";
 
     @Bean
     public ChannelTopic scheduledTriggerTopic() {
@@ -27,6 +28,11 @@ public class RedisPubSubConfig {
     @Bean
     public ChannelTopic eventTypeRegisteredTopic() {
         return new ChannelTopic(EVENT_TYPE_REGISTERED_CHANNEL);
+    }
+
+    @Bean
+    public ChannelTopic sseBroadcastTopic() {
+        return new ChannelTopic(SSE_BROADCAST_CHANNEL);
     }
 
     @Bean

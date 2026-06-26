@@ -1,9 +1,12 @@
 package com.haagendazs.infrastructure.sse;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.application.port.SseNotificationPort;
 import com.haagendazs.domain.model.Channel;
 import com.haagendazs.domain.model.Setting;
 import com.haagendazs.infrastructure.config.NotificationProperties;
+import com.haagendazs.infrastructure.config.RedisPubSubConfig;
 import com.haagendazs.presentation.dto.NotificationResponse;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
@@ -12,6 +15,7 @@ import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -31,6 +35,8 @@ public class SseEmitterManager implements SseNotificationPort {
 
     private final NotificationProperties properties;
     private final MeterRegistry meterRegistry;
+    private final ReactiveStringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     private final Map<Long, SseSession> sessions = new ConcurrentHashMap<>();
     private Counter sentCounter;
@@ -72,13 +78,28 @@ public class SseEmitterManager implements SseNotificationPort {
 
     @Override
     public void send(Long memberId, Object data) {
+        if (!(data instanceof NotificationResponse response)) {
+            log.warn("SSE 브로드캐스트 미지원 타입 memberId={} type={}", memberId, data.getClass().getSimpleName());
+            return;
+        }
+        try {
+            String json = objectMapper.writeValueAsString(response);
+            String message = memberId + ":" + json;
+            redisTemplate.convertAndSend(RedisPubSubConfig.SSE_BROADCAST_CHANNEL, message)
+                    .subscribe(null, e -> log.error("SSE Redis 발행 실패 memberId={}", memberId, e));
+        } catch (JsonProcessingException e) {
+            log.error("SSE 브로드캐스트 직렬화 실패 memberId={}", memberId, e);
+        }
+    }
+
+    public void sendLocal(Long memberId, NotificationResponse response) {
         SseSession session = sessions.get(memberId);
         if (session == null) {
             return;
         }
         long start = System.nanoTime();
         try {
-            ServerSentEvent<Object> event = buildEvent(data);
+            ServerSentEvent<Object> event = buildEvent(response);
             session.sink().tryEmitNext(event);
             sentCounter.increment();
         } finally {
@@ -108,14 +129,11 @@ public class SseEmitterManager implements SseNotificationPort {
         return session != null ? session.channels() : List.of();
     }
 
-    private ServerSentEvent<Object> buildEvent(Object data) {
-        if (data instanceof NotificationResponse response) {
-            return ServerSentEvent.builder()
-                    .event("notification")
-                    .data((Object) response)
-                    .build();
-        }
-        return ServerSentEvent.builder().event("notification").data(data).build();
+    private ServerSentEvent<Object> buildEvent(NotificationResponse response) {
+        return ServerSentEvent.builder()
+                .event("notification")
+                .data((Object) response)
+                .build();
     }
 
     private record SseSession(Sinks.Many<ServerSentEvent<Object>> sink, Setting setting,
