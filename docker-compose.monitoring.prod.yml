@@ -1,0 +1,14 @@
+# EC2-1 배포용 모니터링 — prometheus만 (grafana는 로컬에서 원격 접속)
+# 사용법: docker compose -f docker-compose.prod.app.yml -f docker-compose.monitoring.prod.yml up -d
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: haagendazs-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped

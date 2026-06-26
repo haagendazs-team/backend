@@ -1,0 +1,49 @@
+# 로컬 모니터링 스택 — prometheus(local) + grafana
+# 사용법: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: haagendazs-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: haagendazs-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - REDIS_GRAFANA_URL=redis://haagendazs-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: haagendazs-postgres-exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@haagendazs-postgres:5432/haagendazs?sslmode=disable
+    ports:
+      - "9187:9187"
+    volumes:
+      - ./monitoring/postgres-exporter/queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  grafana-data:

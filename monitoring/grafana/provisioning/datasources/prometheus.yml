@@ -1,9 +1,17 @@
 apiVersion: 1
 
 datasources:
-  - name: Prometheus
+  - name: Prometheus (local)
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+
+  - name: Prometheus (prod)
+    type: prometheus
+    access: proxy
+    # EC2-1 사설 IP 확정 후 아래 주소 업데이트
+    # url: http://<EC2-1-PRIVATE-IP>:9090
+    url: http://localhost:9090
+    editable: true
