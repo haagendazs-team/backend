@@ -44,6 +44,9 @@ dependencies {
     // Email (블로킹 IO — Dispatcher에서 boundedElastic()으로 래핑)
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
+    // Kafka (Reactive — Netty 이벤트 루프 블로킹 방지)
+    implementation 'io.projectreactor.kafka:reactor-kafka:1.3.25'
+
     // Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
