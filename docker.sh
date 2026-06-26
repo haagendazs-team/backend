@@ -9,9 +9,10 @@ usage() {
 사용법:
   ./docker.sh up                        - 전체 스택 기동
   ./docker.sh down                      - 전체 스택 종료
+  ./docker.sh <service>                 - 특정 서비스 + 의존 인프라 기동
   ./docker.sh scale <service> <n>       - 서비스 스케일 (예: ./docker.sh scale member 2)
   ./docker.sh ps                        - 컨테이너 상태 확인
-  ./docker.sh logs <service>            - 서비스 로그 확인
+  ./docker.sh logs [service]            - 서비스 로그 확인
 
 스케일 가능한 서비스: $SCALABLE_SERVICES
 EOF
@@ -58,9 +59,50 @@ cmd_scale() {
         exit 1
     fi
 
-    echo "[scale] $service x $count 기동..."
-    docker compose -f "$COMPOSE_FILE" up -d --scale "$service=$count" --no-recreate "$service"
-    echo "[scale] Eureka 등록 확인: http://localhost:8761"
+    local current
+    current=$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [[ "$count" -lt "$current" ]]; then
+        local remove_count=$(( current - count ))
+        echo "[scale] $service $current → $count (오래된 컨테이너 $remove_count개 종료)"
+        docker compose -f "$COMPOSE_FILE" ps -q "$service" \
+            | xargs -I{} docker inspect --format '{{.Id}} {{.State.StartedAt}}' {} \
+            | sort -k2 \
+            | head -n "$remove_count" \
+            | awk '{print $1}' \
+            | xargs docker stop
+    else
+        echo "[scale] $service x $count 기동..."
+        docker compose -f "$COMPOSE_FILE" up -d --scale "$service=$count" --no-recreate "$service"
+        echo "[scale] Eureka 등록 확인: http://localhost:8761"
+    fi
+}
+
+cmd_service() {
+    local service="${1:-}"
+    if [[ -z "$service" ]]; then
+        echo "오류: 서비스명을 입력하세요." >&2
+        exit 1
+    fi
+
+    local deps="config-server discovery"
+    case "$service" in
+        member|payment|search)
+            deps="$deps postgres kafka" ;;
+        notification)
+            deps="$deps postgres redis kafka" ;;
+        chat)
+            deps="$deps postgres redis kafka" ;;
+        gateway)
+            deps="$deps redis" ;;
+        *)
+            echo "오류: 알 수 없는 서비스 '$service'" >&2
+            exit 1 ;;
+    esac
+
+    echo "[service] $service 및 의존 인프라 기동: $deps"
+    docker compose -f "$COMPOSE_FILE" up -d --no-recreate $deps
+    docker compose -f "$COMPOSE_FILE" up -d --no-recreate "$service"
 }
 
 cmd_ps() {
@@ -85,5 +127,10 @@ case "$COMMAND" in
     scale)  cmd_scale "${1:-}" "${2:-}" ;;
     ps)     cmd_ps ;;
     logs)   cmd_logs "${1:-}" ;;
-    *)      usage; exit 1 ;;
+    *)
+        if is_scalable "$COMMAND" || [[ "$COMMAND" == "gateway" ]]; then
+            cmd_service "$COMMAND"
+        else
+            usage; exit 1
+        fi ;;
 esac
