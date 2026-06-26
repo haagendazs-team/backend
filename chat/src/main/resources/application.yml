@@ -1,30 +1,28 @@
 server:
-  port: 8081
+  port: 8085
 
 spring:
   application:
-    name: notification
+    name: chat
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
 
-  # R2DBC — 논블로킹 DB 연결 (Netty 이벤트 루프 전용)
   r2dbc:
     url: r2dbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     properties:
-      schema: notification
+      schema: chat
     pool:
       initial-size: ${R2DBC_POOL_INITIAL:2}
       max-size: ${R2DBC_POOL_MAX:5}
 
-  # Flyway는 JDBC URL로 별도 동작 (R2DBC URL과 독립적)
   flyway:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
     user: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     locations: classpath:db/migration
-    schemas: notification
+    schemas: chat
     table: flyway_schema_history
 
   data:
@@ -36,7 +34,7 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
-      group-id: notification
+      group-id: chat
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -48,7 +46,7 @@ management:
         include: health,info,prometheus
   metrics:
     tags:
-      application: notification
+      application: chat
 
 eureka:
   client:
@@ -56,32 +54,3 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
-
-notification:
-  pel:
-    claim-min-idle: 5m
-    batch-size: 100
-    stuck-timeout: 10m
-    backoff-minutes: [1, 5, 30, 120, 360]
-    max-stuck-retry: 3
-  stream:
-    max-len: 10000
-  scheduler:
-    reserved-dispatch-cron: "0 0/5 * * * *"
-    stream-trim-cron: "0 0 * * * *"
-    stuck-recovery-cron: "0 0/10 * * * *"
-    pel-reclaim-cron: "0 0/2 * * * *"
-    leader-lock-ttl: 4m
-  channel:
-    max-per-member: 2
-  fanout:
-    chunk-size: 500
-  payload:
-    game-start-offset-minutes: 30
-  sse:
-    timeout-ms: 1800000
-    ping-cron: "0 0/3 * * * *"
-    ping-window-ms: 30000
-  buffer:
-    max-size: 200
-    flush-interval: 500ms

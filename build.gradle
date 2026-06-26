@@ -11,6 +11,24 @@ ext {
     set('javaVersion', '25')
 }
 
+// compose 공통 베이스 인수 — stop/up 양쪽에서 재사용 (toString: ProcessBuilder는 GString 불허)
+def composeBase = ['docker', 'compose', '-f', "${rootDir}/docker-compose.local.yml".toString()]
+
+// .env 파일 파싱 클로저 — startAll·localRun 공통 사용
+def loadEnvVars = {
+    def envVars = [:]
+    def envFile = file("${rootDir}/.env")
+    if (envFile.exists()) {
+        envFile.eachLine { line ->
+            if (line && !line.startsWith('#') && line.contains('=')) {
+                def parts = line.split('=', 2)
+                envVars[parts[0].trim()] = parts[1].trim()
+            }
+        }
+    }
+    return envVars
+}
+
 // 실행 순서: config-server → discovery → gateway → 도메인 서비스
 def startOrder = [
     'config-server',
@@ -19,7 +37,8 @@ def startOrder = [
     'member',
     'payment',
     'search',
-    'notification'
+    'notification',
+    'chat'
 ]
 
 task startAll {
@@ -28,17 +47,7 @@ task startAll {
     dependsOn startOrder.collect { ":${it}:bootJar" }
 
     doLast {
-        // .env 파일 파싱 → 환경변수 맵
-        def envVars = [:]
-        def envFile = file("${rootDir}/.env")
-        if (envFile.exists()) {
-            envFile.eachLine { line ->
-                if (line && !line.startsWith('#') && line.contains('=')) {
-                    def (key, value) = line.split('=', 2)
-                    envVars[key.trim()] = value.trim()
-                }
-            }
-        }
+        def envVars = loadEnvVars()
 
         def logDir = file("${rootDir}/logs")
         logDir.mkdirs()
@@ -69,16 +78,39 @@ task stopAll {
     description = '실행 중인 전체 서비스 종료 (./gradlew stopAll)'
 
     doLast {
-        def ports = [8888, 8761, 8080, 8081, 8082, 8083, 8084]
+        def ports = [8888, 8761, 8080, 8081, 8082, 8083, 8084, 8085]
+        def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
         ports.each { port ->
-            def result = "lsof -ti:${port}".execute().text.trim()
-            if (result) {
-                "kill ${result}".execute()
-                println "Stopped port ${port} (PID ${result})"
+            if (isWindows) {
+                def result = "cmd /c netstat -ano | findstr :${port}".execute().text.trim()
+                result.readLines().each { line ->
+                    def pid = line.trim().split(/\s+/).last()
+                    if (pid.isInteger()) {
+                        "taskkill /PID ${pid} /F".execute()
+                        println "Stopped port ${port} (PID ${pid})"
+                    }
+                }
+            } else {
+                def result = "lsof -ti:${port}".execute().text.trim()
+                if (result) {
+                    "kill ${result}".execute()
+                    println "Stopped port ${port} (PID ${result})"
+                }
             }
         }
     }
 }
+
+def moduleInfra = [
+    'config-server' : [],
+    'discovery'     : ['config-server'],
+    'gateway'       : ['redis', 'config-server', 'discovery'],
+    'notification'  : ['postgres', 'redis', 'kafka', 'config-server', 'discovery'],
+    'chat'          : ['postgres', 'redis', 'kafka', 'config-server', 'discovery'],
+    'member'        : ['postgres', 'kafka', 'config-server', 'discovery'],
+    'payment'       : ['postgres', 'kafka', 'config-server', 'discovery'],
+    'search'        : ['postgres', 'elasticsearch', 'kafka', 'config-server', 'discovery'],
+]
 
 subprojects {
     apply plugin: 'java'
@@ -116,5 +148,57 @@ subprojects {
 
     test {
         useJUnitPlatform()
+    }
+
+    // Spring Boot 모듈 전용 설정
+    plugins.withId('org.springframework.boot') {
+        // plain jar 비활성화 — Dockerfile COPY *.jar 글로브 충돌 방지
+        jar { enabled = false }
+
+        def moduleName = project.name
+
+        tasks.register('localRun') {
+            group = 'application'
+            description = "${moduleName} 개발용 — 필요한 인프라만 기동 후 실행"
+
+            dependsOn tasks.named('bootJar')
+
+            doFirst {
+                if (!moduleInfra.containsKey(moduleName)) {
+                    throw new GradleException(
+                        "moduleInfra에 '${moduleName}' 항목 없음 — 루트 build.gradle 맵에 추가하세요."
+                    )
+                }
+
+                def infraServices = moduleInfra[moduleName]
+
+                println "\n[localRun] ${moduleName} 컨테이너 stop (포트 해제)..."
+                new ProcessBuilder(composeBase + ['stop', moduleName])
+                    .inheritIO().directory(rootDir).start().waitFor()
+
+                if (!infraServices.isEmpty()) {
+                    println "[localRun] ${moduleName} 필요 인프라 기동: ${infraServices.join(', ')}"
+                    def exit = new ProcessBuilder(composeBase + ['up', '-d', '--wait'] + infraServices)
+                        .inheritIO().directory(rootDir).start().waitFor()
+                    if (exit != 0) {
+                        throw new GradleException("[localRun] ${moduleName} 인프라 기동 실패 (exit ${exit})")
+                    }
+                    println "[localRun] 인프라 헬스체크 통과 완료"
+                } else {
+                    println "\n[localRun] ${moduleName} — 외부 인프라 의존 없음, 바로 실행"
+                }
+            }
+
+            doLast {
+                def envVars = loadEnvVars()
+                def jar = file("${rootDir}/${moduleName}/build/libs/${moduleName}-0.0.1-SNAPSHOT.jar")
+                println "[localRun] 서비스 기동: ${moduleName}"
+                def pb = new ProcessBuilder(
+                    'java', '-Xmx256m', '-jar', jar.absolutePath
+                ).inheritIO().directory(rootDir)
+                pb.environment().putAll(envVars)
+                pb.start().waitFor()
+            }
+        }
     }
 }

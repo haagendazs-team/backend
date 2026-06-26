@@ -1,6 +1,5 @@
-# 모니터링 스택 — local/prod 공용
-# local: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -d
-# prod:  docker compose -f docker-compose.prod.yml  -f docker-compose.monitoring.yml up -d
+# 로컬 모니터링 스택 — prometheus(local) + grafana
+# 사용법: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
 
 services:
   prometheus:
@@ -11,7 +10,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -23,7 +22,7 @@ services:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_INSTALL_PLUGINS=redis-datasource
-      - REDIS_GRAFANA_URL=redis://${REDIS_HOST:-haagendazs-redis}:6379
+      - REDIS_GRAFANA_URL=redis://haagendazs-redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "3001:3000"
