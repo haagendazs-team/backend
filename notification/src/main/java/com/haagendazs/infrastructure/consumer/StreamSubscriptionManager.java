@@ -5,7 +5,6 @@ import com.haagendazs.application.service.FanoutService;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
-import com.haagendazs.presentation.EventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -75,24 +74,17 @@ public class StreamSubscriptionManager {
         }
     }
 
-    // TODO(Task 6): EventStatusService/FanoutService 시그니처가 EventTypeDefinition으로 변경되면
-    // EventType.fromStreamKey 브릿지 코드를 제거하고 definition을 직접 전달한다.
     private Flux<Void> handleMessage(EventTypeDefinition definition,
                                       ObjectRecord<String, String> message) {
         String streamKey = definition.getStreamKey();
-        EventType eventType = EventType.fromStreamKey(streamKey).orElse(null);
-        if (eventType == null) {
-            log.warn("미등록 streamKey 수신 — 처리 건너뜀 streamKey={}", streamKey);
-            return Flux.empty();
-        }
-        return statusService.saveEventWithStreamMessageId(eventType, message.getValue(), message.getId().getValue())
+        return statusService.saveEventWithStreamMessageId(definition, message.getValue(), message.getId().getValue())
                 .flatMapMany(event -> {
                     if (event.isScheduled()) {
                         return acknowledge(streamKey, message)
                                 .doOnSuccess(v -> log.info("예약 알림 저장 완료 ACK streamKey={} id={}", streamKey, message.getId()))
                                 .flux();
                     }
-                    return fanoutService.fanoutBuffered(event, eventType, message.getValue(), streamKey, message.getId())
+                    return fanoutService.fanoutBuffered(event, definition, message.getValue(), streamKey, message.getId())
                             .then(statusService.markEventStatus(event.getId(), false))
                             .doOnSuccess(v -> log.info("버퍼 enqueue 완료 streamKey={} id={}", streamKey, message.getId()))
                             .flux();

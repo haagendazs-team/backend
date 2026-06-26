@@ -4,10 +4,10 @@ import com.haagendazs.application.listener.NotificationPermanentlyFailedEvent;
 import com.haagendazs.application.service.EventStatusService;
 import com.haagendazs.application.service.FanoutService;
 import com.haagendazs.application.service.PayloadParser;
-import com.haagendazs.presentation.EventType;
-import com.haagendazs.domain.model.Notification;
 import com.haagendazs.domain.model.Event;
 import com.haagendazs.domain.model.EventStatus;
+import com.haagendazs.domain.model.EventTypeDefinition;
+import com.haagendazs.domain.model.Notification;
 import com.haagendazs.domain.repository.EventRepository;
 import com.haagendazs.domain.repository.NotificationRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
@@ -56,11 +56,12 @@ public class PelMessageProcessor {
         this.backoffMinutes = properties.pel().backoffMinutes();
     }
 
-    public Mono<Void> process(String streamKey, EventType eventType, MapRecord<String, Object, Object> message) {
+    public Mono<Void> process(String streamKey, EventTypeDefinition definition,
+                               MapRecord<String, Object, Object> message) {
         String payload = String.valueOf(message.getValue().get(ReactiveRedisStreamEventPublisher.PAYLOAD_KEY));
         String streamMessageId = message.getId().getValue();
 
-        return statusService.saveEventWithStreamMessageId(eventType, payload, streamMessageId)
+        return statusService.saveEventWithStreamMessageId(definition, payload, streamMessageId)
                 .flatMap(event -> {
                     if (isAlreadyResolved(event)) {
                         return acknowledge(streamKey, message)
@@ -70,14 +71,14 @@ public class PelMessageProcessor {
                         return acknowledge(streamKey, message)
                                 .doOnSuccess(v -> log.info("PEL 이벤트 ACK (예약 미도래) streamKey={} id={}", streamKey, message.getId()));
                     }
-                    return fanoutService.fanout(event, eventType, payload)
+                    return fanoutService.fanout(event, definition, payload)
                             .flatMap(failed -> {
                                 if (!failed) {
                                     return statusService.markEventStatus(event.getId(), false)
                                             .then(acknowledge(streamKey, message))
                                             .doOnSuccess(v -> log.info("PEL 재처리 완료 streamKey={} id={}", streamKey, message.getId()));
                                 }
-                                return handleExhausted(event, streamKey, message);
+                                return handleExhausted(event, definition, streamKey, message);
                             });
                 })
                 .onErrorResume(e -> {
@@ -91,7 +92,8 @@ public class PelMessageProcessor {
         return Duration.ofMinutes(backoffMinutes.get(index));
     }
 
-    private Mono<Void> handleExhausted(Event event, String streamKey, MapRecord<String, Object, Object> message) {
+    private Mono<Void> handleExhausted(Event event, EventTypeDefinition definition,
+                                        String streamKey, MapRecord<String, Object, Object> message) {
         if (!event.incrementRetryAndCheckExhausted(backoffMinutes.size())) {
             return eventRepository.save(event)
                     .then()
@@ -99,7 +101,7 @@ public class PelMessageProcessor {
         }
         event.markPermanentlyFailed();
         return eventRepository.save(event)
-                .flatMap(saved -> saveNotificationForPermanentlyFailed(saved))
+                .flatMap(saved -> saveNotificationForPermanentlyFailed(saved, definition))
                 .then(acknowledge(streamKey, message))
                 .doOnSuccess(v -> {
                     log.error("PEL 재처리 모두 소진, 영구 실패 처리 eventId={} retryCount={}", event.getId(), event.getRetryCount());
@@ -108,12 +110,12 @@ public class PelMessageProcessor {
                 });
     }
 
-    private Mono<Void> saveNotificationForPermanentlyFailed(Event event) {
-        if (!EventType.valueOf(event.getEventTypeCode()).isSingleTarget()) {
+    private Mono<Void> saveNotificationForPermanentlyFailed(Event event, EventTypeDefinition definition) {
+        if (!definition.isSingleTarget()) {
             return Mono.empty();
         }
         try {
-            Long memberId = payloadParser.extractMemberId(event.getPayload(), event.getTypeName());
+            Long memberId = payloadParser.extractMemberId(event.getPayload(), definition);
             return notificationRepository.existsByEventIdAndMemberId(event.getId(), memberId)
                     .filter(exists -> !exists)
                     .flatMap(ignored -> notificationRepository.save(Notification.create(memberId, event.getId())))

@@ -7,8 +7,7 @@ import com.haagendazs.domain.model.*;
 import com.haagendazs.domain.repository.ChannelRepository;
 import com.haagendazs.domain.repository.HistoryRepository;
 import com.haagendazs.domain.repository.NotificationRepository;
-import com.haagendazs.domain.repository.SettingRepository;
-import com.haagendazs.presentation.EventType;
+import com.haagendazs.domain.repository.SettingEntryRepository;
 import com.haagendazs.presentation.dto.NotificationResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,7 +27,7 @@ public class Dispatcher {
     private final NotificationRepository notificationRepository;
     private final ChannelRepository channelRepository;
     private final HistoryRepository historyRepository;
-    private final SettingRepository settingRepository;
+    private final SettingEntryRepository settingEntryRepository;
     private final SseNotificationPort sseNotificationPort;
     private final Map<ChannelType, NotificationSender> senderMap;
 
@@ -36,14 +35,14 @@ public class Dispatcher {
             NotificationRepository notificationRepository,
             ChannelRepository channelRepository,
             HistoryRepository historyRepository,
-            SettingRepository settingRepository,
+            SettingEntryRepository settingEntryRepository,
             SseNotificationPort sseNotificationPort,
             List<NotificationSender> senders
     ) {
         this.notificationRepository = notificationRepository;
         this.channelRepository = channelRepository;
         this.historyRepository = historyRepository;
-        this.settingRepository = settingRepository;
+        this.settingEntryRepository = settingEntryRepository;
         this.sseNotificationPort = sseNotificationPort;
         this.senderMap = senders.stream()
                 .collect(Collectors.toMap(NotificationSender::channelType, Function.identity()));
@@ -53,8 +52,9 @@ public class Dispatcher {
         return notificationRepository.existsByEventIdAndMemberId(event.getId(), memberId)
                 .filter(exists -> !exists)
                 .switchIfEmpty(Mono.just(true).filter(v -> false))
-                .flatMap(ignored -> settingRepository.findByMemberId(memberId)
-                        .map(s -> s.isEnabledFor(EventType.valueOf(event.getEventTypeCode())))
+                .flatMap(ignored -> settingEntryRepository
+                        .findByMemberIdAndEventTypeCode(memberId, event.getEventTypeCode())
+                        .map(SettingEntry::isEnabled)
                         .defaultIfEmpty(true))
                 .filter(enabled -> enabled)
                 .flatMap(ignored -> notificationRepository.save(Notification.create(memberId, event.getId())))
@@ -85,7 +85,7 @@ public class Dispatcher {
     }
 
     public Mono<History> sendToChannelAndBuildHistory(Long notificationId, Channel channel,
-                                                                    String subject, String body) {
+                                                       String subject, String body) {
         NotificationSender sender = senderMap.get(channel.getChannelType());
         if (sender == null) {
             log.warn("지원하지 않는 채널 타입 channelType={} notificationId={}", channel.getChannelType(), notificationId);

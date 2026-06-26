@@ -1,7 +1,7 @@
 package com.haagendazs.application.service;
 
-import com.haagendazs.presentation.EventType;
 import com.haagendazs.domain.model.Event;
+import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.repository.EventRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +21,11 @@ public class EventStatusService {
     private final PayloadParser payloadParser;
     private final NotificationProperties properties;
 
-    public Mono<Event> saveEventWithStreamMessageId(EventType eventType, String payload, String streamMessageId) {
+    public Mono<Event> saveEventWithStreamMessageId(EventTypeDefinition definition,
+                                                     String payload, String streamMessageId) {
         return eventRepository.findByStreamMessageId(streamMessageId)
                 .switchIfEmpty(Mono.defer(() -> {
-                    Event event = buildEvent(eventType, payload);
+                    Event event = buildEvent(definition, payload);
                     event.assignStreamMessageId(streamMessageId);
                     return eventRepository.save(event);
                 }));
@@ -37,19 +38,20 @@ public class EventStatusService {
                 .then();
     }
 
-    private Event buildEvent(EventType eventType, String payload) {
-        if (eventType.isScheduled()) {
-            Optional<LocalDateTime> scheduledAt = payloadParser.extractScheduledAt(payload, eventType);
+    private Event buildEvent(EventTypeDefinition definition, String payload) {
+        if (definition.isScheduled()) {
+            Optional<LocalDateTime> scheduledAt = payloadParser.extractScheduledAt(payload, definition);
             if (scheduledAt.isPresent()) {
-                return Event.createScheduled(eventType.name(), payload, scheduledAt.get());
+                return Event.createScheduled(definition.getCode(), payload, scheduledAt.get());
             }
         }
-        return Event.create(eventType.name(), payload);
+        return Event.create(definition.getCode(), payload);
     }
 
     private Mono<Event> applyStatus(Event event, boolean anyFailed) {
         if (anyFailed) {
-            boolean exhausted = event.incrementRetryAndCheckExhausted(properties.pel().backoffMinutes().size());
+            boolean exhausted = event.incrementRetryAndCheckExhausted(
+                    properties.pel().backoffMinutes().size());
             if (exhausted) {
                 event.markPermanentlyFailed();
             } else {

@@ -1,6 +1,6 @@
 package com.haagendazs.infrastructure.consumer;
 
-import com.haagendazs.presentation.EventType;
+import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
@@ -26,9 +26,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StreamMaintenanceScheduler implements SmartLifecycle {
 
-    private static final Map<String, EventType> STREAM_TO_EVENT =
-            EventType.streamKeyMap();
-
     private final ReactiveStringRedisTemplate redisTemplate;
     private final PelMessageProcessor pelMessageProcessor;
     private final NotificationProperties properties;
@@ -50,7 +47,8 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
         if (!running.get()) {
             return;
         }
-        STREAM_TO_EVENT.forEach(this::reclaimForStream);
+        eventTypeRegistry.getAllDefinitions()
+                .forEach(definition -> reclaimForStream(definition.getStreamKey(), definition));
     }
 
     @Scheduled(cron = "${notification.scheduler.stream-trim-cron}")
@@ -65,7 +63,7 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
                 .subscribe();
     }
 
-    private void reclaimForStream(String streamKey, EventType eventType) {
+    private void reclaimForStream(String streamKey, EventTypeDefinition definition) {
         try {
             int batchSize = properties.pel().batchSize();
             redisTemplate.opsForStream()
@@ -84,7 +82,7 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
                                                 "maintenance-consumer",
                                                 entry.getKey(),
                                                 entry.getValue().toArray(new RecordId[0]))
-                                        .flatMap(message -> pelMessageProcessor.process(streamKey, eventType, message)));
+                                        .flatMap(message -> pelMessageProcessor.process(streamKey, definition, message)));
                     })
                     .subscribe(
                             v -> {},
