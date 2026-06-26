@@ -10,6 +10,7 @@ usage() {
   ./docker.sh up                        - 전체 스택 기동
   ./docker.sh down                      - 전체 스택 종료
   ./docker.sh <service>                 - 특정 서비스 + 의존 인프라 기동
+  ./docker.sh restart <service>         - 서비스 재빌드 후 재기동
   ./docker.sh scale <service> <n>       - 서비스 스케일 (예: ./docker.sh scale member 2)
   ./docker.sh ps                        - 컨테이너 상태 확인
   ./docker.sh logs [service]            - 서비스 로그 확인
@@ -36,6 +37,17 @@ cmd_up() {
 cmd_down() {
     echo "[down] 전체 스택 종료..."
     docker compose -f "$COMPOSE_FILE" down
+}
+
+cmd_restart() {
+    local service="${1:-}"
+    if [[ -z "$service" ]]; then
+        echo "오류: 서비스명을 입력하세요." >&2
+        exit 1
+    fi
+
+    echo "[restart] $service 재빌드 및 재기동..."
+    docker compose -f "$COMPOSE_FILE" up -d --build --no-deps "$service"
 }
 
 cmd_scale() {
@@ -70,7 +82,8 @@ cmd_scale() {
             | sort -k2 \
             | head -n "$remove_count" \
             | awk '{print $1}' \
-            | xargs docker stop
+            | xargs -r docker stop \
+            | xargs -r docker rm
     else
         echo "[scale] $service x $count 기동..."
         docker compose -f "$COMPOSE_FILE" up -d --scale "$service=$count" --no-recreate "$service"
@@ -122,11 +135,12 @@ COMMAND="${1:-}"
 shift || true
 
 case "$COMMAND" in
-    up)     cmd_up ;;
-    down)   cmd_down ;;
-    scale)  cmd_scale "${1:-}" "${2:-}" ;;
-    ps)     cmd_ps ;;
-    logs)   cmd_logs "${1:-}" ;;
+    up)      cmd_up ;;
+    down)    cmd_down ;;
+    restart) cmd_restart "${1:-}" ;;
+    scale)   cmd_scale "${1:-}" "${2:-}" ;;
+    ps)      cmd_ps ;;
+    logs)    cmd_logs "${1:-}" ;;
     *)
         if is_scalable "$COMMAND" || [[ "$COMMAND" == "gateway" ]]; then
             cmd_service "$COMMAND"
