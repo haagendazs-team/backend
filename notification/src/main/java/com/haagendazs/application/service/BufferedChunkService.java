@@ -1,9 +1,8 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.application.port.SseNotificationPort;
-import com.haagendazs.domain.model.Notification;
-import com.haagendazs.presentation.EventType;
 import com.haagendazs.domain.model.BufferItem;
+import com.haagendazs.domain.model.Notification;
 import com.haagendazs.domain.model.Event;
 import com.haagendazs.domain.repository.NotificationRepository;
 import com.haagendazs.domain.repository.SettingRepository;
@@ -48,7 +47,7 @@ public class BufferedChunkService {
                                     continue;
                                 }
                                 var setting = settingMap.get(memberId);
-                                if (setting != null && !setting.isEnabledFor(EventType.valueOf(event.getEventTypeCode()))) {
+                                if (setting != null && !setting.isEnabledFor(event.getEventTypeCode())) {
                                     continue;
                                 }
                                 Notification notification = Notification.create(memberId, event.getId());
