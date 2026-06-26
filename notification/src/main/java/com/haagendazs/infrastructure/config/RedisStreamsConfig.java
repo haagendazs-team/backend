@@ -31,14 +31,4 @@ public class RedisStreamsConfig {
         return StreamReceiver.create(connectionFactory, options);
     }
 
-    private boolean isBusyGroup(Exception e) {
-        Throwable cause = e;
-        while (cause != null) {
-            if (cause.getMessage() != null && cause.getMessage().contains("BUSYGROUP")) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return false;
-    }
 }

@@ -80,8 +80,11 @@ public class StreamSubscriptionManager {
     private Flux<Void> handleMessage(EventTypeDefinition definition,
                                       ObjectRecord<String, String> message) {
         String streamKey = definition.getStreamKey();
-        EventType eventType = EventType.fromStreamKey(streamKey)
-                .orElseThrow(() -> new IllegalStateException("알 수 없는 streamKey: " + streamKey));
+        EventType eventType = EventType.fromStreamKey(streamKey).orElse(null);
+        if (eventType == null) {
+            log.warn("미등록 streamKey 수신 — 처리 건너뜀 streamKey={}", streamKey);
+            return Flux.empty();
+        }
         return statusService.saveEventWithStreamMessageId(eventType, message.getValue(), message.getId().getValue())
                 .flatMapMany(event -> {
                     if (event.isScheduled()) {
