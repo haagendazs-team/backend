@@ -31,4 +31,8 @@ public class SettingEntry {
         entry.enabled = true;
         return entry;
     }
+
+    public void updateEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 }
