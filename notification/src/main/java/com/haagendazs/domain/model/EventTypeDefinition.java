@@ -51,7 +51,7 @@ public class EventTypeDefinition implements Persistable<String> {
     private LocalDateTime updatedAt;
 
     @Transient
-    private boolean isNew;
+    private boolean newEntity;
 
     public static EventTypeDefinition of(String code, String streamKey,
                                           boolean isScheduled, boolean isSingleTarget,
@@ -66,7 +66,7 @@ public class EventTypeDefinition implements Persistable<String> {
         def.scheduledAtField = scheduledAtField;
         def.scheduledOffsetMinutes = scheduledOffsetMinutes;
         def.enabled = true;
-        def.isNew = true;
+        def.newEntity = true;
         return def;
     }
 
@@ -77,6 +77,6 @@ public class EventTypeDefinition implements Persistable<String> {
 
     @Override
     public boolean isNew() {
-        return isNew;
+        return newEntity;
     }
 }
