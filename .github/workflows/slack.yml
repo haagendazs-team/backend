@@ -41,8 +41,6 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "username": "PR BOT",
-              "icon_url": "https://raw.githubusercontent.com/${{ github.repository }}/main/.github/github_img.png",
               "text": ":bell: *PR Opened*\nPR 제목: ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})\n작성자: ${{ steps.slack-user.outputs.mention }}\n링크: ${{ github.event.pull_request.html_url }}"
             }
 
@@ -54,7 +52,5 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "username": "PR BOT",
-              "icon_url": "https://raw.githubusercontent.com/${{ github.repository }}/main/.github/github_img.png",
               "text": ":white_check_mark: *PR Merged*\nPR 제목: ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})\n작성자: ${{ steps.slack-user.outputs.mention }}\n링크: ${{ github.event.pull_request.html_url }}"
             }
