@@ -1,7 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.repository.EventTypeRepository;
 import com.haagendazs.infrastructure.consumer.StreamSubscriptionManager;
@@ -52,7 +52,7 @@ class EventTypeRegistrationServiceJunitExceptionTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.EVENT_TYPE_DUPLICATE));
+                        .isEqualTo(NotificationErrorCode.EVENT_TYPE_DUPLICATE));
     }
 
     @Test
@@ -71,7 +71,7 @@ class EventTypeRegistrationServiceJunitExceptionTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.EVENT_TYPE_DUPLICATE));
+                        .isEqualTo(NotificationErrorCode.EVENT_TYPE_DUPLICATE));
     }
 
     @Test
@@ -88,6 +88,6 @@ class EventTypeRegistrationServiceJunitExceptionTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.EVENT_TYPE_STREAM_KEY_INVALID));
+                        .isEqualTo(NotificationErrorCode.EVENT_TYPE_STREAM_KEY_INVALID));
     }
 }

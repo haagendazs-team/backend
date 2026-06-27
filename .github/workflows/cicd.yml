@@ -63,20 +63,6 @@ jobs:
           echo "modules=$JSON" >> "$GITHUB_OUTPUT"
           echo "Modules to test: $JSON"
 
-      - name: Label PR and assign author
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          REPO: ${{ github.repository }}
-        run: |
-          MODULES=$(echo '${{ steps.changed.outputs.modules }}' | jq -r '.[]')
-          for MODULE in $MODULES; do
-            gh label create "$MODULE" --repo "$REPO" --color "0075ca" 2>/dev/null || true
-            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$MODULE"
-          done
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-assignee "$PR_AUTHOR"
 
   build:
     runs-on: ubuntu-latest

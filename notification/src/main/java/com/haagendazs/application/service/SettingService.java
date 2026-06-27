@@ -1,7 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.application.dto.ChannelResult;
 import com.haagendazs.application.dto.SettingResult;
 import com.haagendazs.application.dto.UpdateSettingCommand;
@@ -40,7 +40,7 @@ public class SettingService {
     @Transactional
     public Mono<SettingResult> updateSetting(Long memberId, UpdateSettingCommand command) {
         if (eventTypeRegistry.getByCode(command.eventTypeCode()).isEmpty()) {
-            return Mono.error(new BusinessException(ErrorCode.EVENT_TYPE_NOT_FOUND));
+            return Mono.error(new BusinessException(NotificationErrorCode.EVENT_TYPE_NOT_FOUND));
         }
         return settingEntryRepository.findByMemberIdAndEventTypeCode(memberId, command.eventTypeCode())
                 .switchIfEmpty(Mono.defer(() ->
@@ -63,25 +63,25 @@ public class SettingService {
         return channelRepository.existsByMemberIdAndChannelType(memberId, channelType)
                 .flatMap(exists -> {
                     if (exists) {
-                        return Mono.error(new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
+                        return Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
                     }
                     return channelRepository.countByMemberId(memberId);
                 })
                 .flatMap(count -> {
                     if (count >= properties.channel().maxPerMember()) {
-                        return Mono.error(new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_LIMIT_EXCEEDED));
+                        return Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_LIMIT_EXCEEDED));
                     }
                     return channelRepository.save(Channel.create(memberId, channelType, channelTarget));
                 })
                 .map(ChannelResult::from)
                 .onErrorMap(DataIntegrityViolationException.class,
-                        e -> new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
+                        e -> new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
     }
 
     @Transactional
     public Mono<Void> deleteChannel(Long memberId, Long channelId) {
         return channelRepository.findById(channelId)
-                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND)))
+                .switchIfEmpty(Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND)))
                 .flatMap(channel -> {
                     channel.validateOwner(memberId);
                     return channelRepository.delete(channel);
@@ -91,7 +91,7 @@ public class SettingService {
     @Transactional
     public Mono<ChannelResult> toggleChannel(Long memberId, Long channelId) {
         return channelRepository.findById(channelId)
-                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND)))
+                .switchIfEmpty(Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND)))
                 .flatMap(channel -> {
                     channel.validateOwner(memberId);
                     channel.toggle();

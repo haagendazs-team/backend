@@ -1,7 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.application.dto.NotificationResult;
 import com.haagendazs.application.port.SseNotificationPort;
 import com.haagendazs.domain.model.Setting;
@@ -31,7 +31,7 @@ public class NotificationService {
     public Flux<NotificationResult> getNotifications(Long memberId, long offset, int limit) {
         return notificationRepository.findByMemberIdOrderByCreatedAtDesc(memberId, offset, limit)
                 .flatMap(notification -> eventRepository.findById(notification.getEventId())
-                        .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND)))
+                        .switchIfEmpty(Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND)))
                         .map(event -> NotificationResult.of(notification, event)));
     }
 
@@ -42,10 +42,10 @@ public class NotificationService {
     @Transactional
     public Mono<Void> markRead(Long memberId, Long notificationId) {
         return notificationRepository.findByIdAndMemberId(notificationId, memberId)
-                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND)))
+                .switchIfEmpty(Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND)))
                 .flatMap(notification -> {
                     if (notification.isAlreadyRead()) {
-                        return Mono.error(new BusinessException(ErrorCode.NOTIFICATION_ALREADY_READ));
+                        return Mono.error(new BusinessException(NotificationErrorCode.NOTIFICATION_ALREADY_READ));
                     }
                     notification.markRead();
                     return notificationRepository.save(notification).then();

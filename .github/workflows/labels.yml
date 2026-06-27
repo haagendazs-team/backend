@@ -1,0 +1,54 @@
+name: Labels
+
+on:
+  pull_request:
+    branches: [ develop ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect authored modules and apply labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          ALL_MODULES="config-server discovery gateway member payment search notification chat common"
+
+          CHANGED_FILES=$(git diff "$BASE"...HEAD --name-only)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          LABEL_MODULES=""
+          for MODULE in $ALL_MODULES; do
+            if echo "$CHANGED_FILES" | grep -q "^${MODULE}/"; then
+              LABEL_MODULES="$LABEL_MODULES $MODULE"
+            fi
+          done
+          LABEL_MODULES=$(echo "$LABEL_MODULES" | xargs)
+          echo "Label modules: $LABEL_MODULES"
+
+          for MODULE in $LABEL_MODULES; do
+            gh label create "$MODULE" --repo "$REPO" --color "0075ca" 2>/dev/null || true
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label "$MODULE"
+          done
+
+          gh pr view "$PR_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' | while read -r L; do
+            if echo "$ALL_MODULES" | grep -qw "$L" && ! echo "$LABEL_MODULES" | grep -qw "$L"; then
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$L" || true
+            fi
+          done
+
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-assignee "$PR_AUTHOR"
