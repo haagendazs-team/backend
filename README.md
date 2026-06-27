@@ -1,6 +1,6 @@
 # Haagendazs Backend
 
-Spring Boot 4.0.3 기반 MSA 백엔드 프로젝트
+Spring Boot 4.0 기반 MSA 백엔드 프로젝트
 
 ## 기술 스택
 
@@ -8,130 +8,92 @@ Spring Boot 4.0.3 기반 MSA 백엔드 프로젝트
 |------|------|
 | Language | Java 25 |
 | Framework | Spring Boot 4.0.3 |
-| Cloud | Spring Cloud 2025.1.x (Boot 4.x 전용) |
+| Cloud | Spring Cloud 2025.1.x |
 | Database | PostgreSQL 18 |
-| Cache | Redis 8 |
+| Cache / Pub-Sub | Redis 8 |
+| Message Broker | Apache Kafka 4.0 (KRaft) |
 | Search | Elasticsearch 8.13 |
-| Build | Gradle |
+| Service Discovery | Eureka (Spring Cloud Netflix) |
+| API Gateway | Spring Cloud Gateway |
+| Build | Gradle (Multi-module) |
 
-## 서비스 포트
+## 모듈 구성
 
-| 서비스 | 포트 |
-|--------|------|
-| Gateway | 8080 |
-| Notification | 8081 |
-| Search | 8082 |
-| Payment | 8083 |
-| Member | 8084 |
-| Eureka (Discovery) | 8761 |
-| Config Server | 8888 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| Elasticsearch | 9200 |
-| Prometheus | 9090 |
-| Grafana | 3001 |
+| 모듈 | 포트 | 설명 |
+|------|------|------|
+| `config-server` | 8888 | 중앙 설정 서버 |
+| `discovery` | 8761 | Eureka 서비스 레지스트리 |
+| `gateway` | 8080 | API Gateway (JWT 검증, 라우팅) |
+| `member` | 8084 | 회원 서비스 |
+| `payment` | 8083 | 결제 서비스 |
+| `search` | 8082 | 검색 서비스 (Elasticsearch) |
+| `notification` | 8081 | 알림 서비스 (SSE, Redis Streams, Kafka) |
+| `chat` | 8085 | 채팅 서비스 (R2DBC, Redis) |
+| `common` | — | 공통 예외·응답 모듈 |
 
-## 로컬 개발 시작
+> `member`, `payment`, `search`, `notification`, `chat`은 스케일아웃 가능 (`container_name`, `ports` 미사용)
 
-### 1. 사전 요구사항
+## 로컬 실행
 
-- Java 25
+### 사전 요구사항
+
 - Docker Desktop
-- Gradle (또는 `./gradlew` 사용)
-
-### 2. 환경 변수 설정
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일을 열어 빈 값을 채웁니다.
+- `.env` 파일 (아래 항목 필요)
 
 ```env
-POSTGRES_USER=haagendazs
-POSTGRES_PASSWORD=패스워드설정
-REDIS_PASSWORD=패스워드설정
-JWT_SECRET=32자리이상랜덤문자열
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+REDIS_PASSWORD=
+JWT_SECRET=
+GITHUB_CONFIG_SERVER=
+FRONT_URI=http://localhost:3000
 ```
 
-### 3. 인프라 실행
+### docker.sh 사용법
 
 ```bash
-# 인프라만 (PostgreSQL, Redis, Elasticsearch)
-docker compose -f docker-compose.local.yml up -d
-
-# 모니터링 포함 (Prometheus, Grafana)
-docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -d
+./docker.sh up                        # 전체 스택 기동
+./docker.sh down                      # 전체 스택 종료
+./docker.sh <service>                 # 특정 서비스 + 의존 인프라 기동
+./docker.sh restart <service>         # 서비스 재빌드 후 재기동
+./docker.sh scale <service> <n>       # 서비스 스케일 (예: ./docker.sh scale member 2)
+./docker.sh ps                        # 컨테이너 상태 확인
+./docker.sh logs [service]            # 로그 확인
 ```
 
-### 4. 서비스 빌드
+**예시 — 알림 서비스만 실행**
 
 ```bash
-./gradlew bootJar
+./docker.sh notification
 ```
 
-### 5. 서비스 실행
+의존 인프라(config-server, discovery, postgres, redis, kafka)를 자동으로 먼저 기동합니다.
 
-#### 자동 실행 (전체)
+**예시 — 스케일아웃**
 
 ```bash
-./gradlew startAll
+./docker.sh scale member 2   # member 인스턴스 2개로 확장
+./docker.sh scale member 1   # 가장 오래된 컨테이너 순으로 축소
 ```
 
-- `.env`를 자동으로 읽어 환경변수 주입
-- 실행 순서: config-server → discovery → gateway → 도메인 서비스
-- 로그: `logs/{서비스명}.log`
+### 모니터링 포함 실행
 
 ```bash
-tail -f logs/gateway.log
+docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
 ```
 
-종료:
-
-```bash
-./gradlew stopAll
-```
-
-#### 수동 실행 (개별)
-
-특정 서비스만 띄우거나 디버깅할 때 사용합니다.
-
-```bash
-# 환경변수 로드
-export $(grep -v '^#' .env | xargs)
-
-# 실행 순서 준수
-java -jar config-server/build/libs/config-server-0.0.1-SNAPSHOT.jar
-java -jar discovery/build/libs/discovery-0.0.1-SNAPSHOT.jar
-java -jar gateway/build/libs/gateway-0.0.1-SNAPSHOT.jar
-
-# 도메인 서비스 (순서 무관)
-java -jar member/build/libs/member-0.0.1-SNAPSHOT.jar
-java -jar payment/build/libs/payment-0.0.1-SNAPSHOT.jar
-java -jar search/build/libs/search-0.0.1-SNAPSHOT.jar
-java -jar notification/build/libs/notification-0.0.1-SNAPSHOT.jar
-```
-
-### 6. 동작 확인
-
-```bash
-# Eureka 등록 현황
-curl http://localhost:8761
-
-# Gateway 헬스체크
-curl http://localhost:8080/actuator/health
-
-# 서비스별 라우팅 확인
-curl http://localhost:8080/api/members/actuator/health
-curl http://localhost:8080/api/payments/actuator/health
-curl http://localhost:8080/api/notifications/actuator/health
-curl http://localhost:8080/api/search/actuator/health
-```
+| 도구 | 주소 |
+|------|------|
+| Eureka Dashboard | http://localhost:8761 |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
 
 ## 브랜치 전략
 
 ```
 main ← release ← develop ← feat/*
+                          ← refactor/*
+                          ← hotfix/*
 ```
 
 | 브랜치 | 용도 |
@@ -140,9 +102,38 @@ main ← release ← develop ← feat/*
 | `release` | 배포 준비 |
 | `develop` | 통합 개발 |
 | `feat/*` | 기능 개발 |
+| `refactor/*` | 리팩토링 |
 | `hotfix/*` | 긴급 버그 수정 |
+
+## CI/CD
+
+PR을 `develop`으로 올리면 자동 실행됩니다.
+
+- **변경된 모듈만 테스트** — `common` 변경 시 전체 모듈 테스트
+- **모듈별 병렬 실행** — GitHub Actions matrix strategy
+- **라벨 자동 관리** — 실제 수정한 모듈 라벨만 부착/제거
+- **Assignee 자동 주입** — PR 작성자 자동 등록
+
+## 아키텍처
+
+```
+Client
+  │
+  ▼
+Gateway (8080) ── JWT 검증
+  │
+  ├── member       (8084) ── PostgreSQL ── Kafka
+  ├── payment      (8083) ── PostgreSQL ── Kafka
+  ├── search       (8082) ── PostgreSQL ── Elasticsearch ── Kafka
+  ├── notification (8081) ── PostgreSQL ── Redis (Streams + Pub/Sub) ── Kafka
+  └── chat         (8085) ── PostgreSQL ── Redis ── Kafka
+
+인프라 기동 순서: config-server → discovery → [서비스]
+```
+
+**SSE 멀티 인스턴스:** 알림 서비스는 Redis Pub/Sub으로 모든 인스턴스에 브로드캐스트하여 스케일아웃 시에도 SSE 세션을 정확히 전달합니다.
 
 ## Config Server
 
-설정은 [config_repo](https://github.com/haagendazs-team/config_repo)에서 중앙 관리합니다.  
-로컬에서는 `optional:configserver:` 설정으로 repo가 비어있어도 각 서비스의 `application.yml`로 동작합니다.
+설정은 중앙 config repo에서 관리합니다.
+로컬에서는 `optional:configserver:` 설정으로 config repo 없이도 각 서비스의 `application.yml`로 동작합니다.
