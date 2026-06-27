@@ -42,7 +42,7 @@ jobs:
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             CHANGED_MODULES="$ALL_MODULES"
           else
-            CHANGED_FILES=$(git diff --name-only "$BASE" HEAD)
+            CHANGED_FILES=$(git diff --name-only "$BASE"...HEAD)
             echo "Changed files:"
             echo "$CHANGED_FILES"
 
