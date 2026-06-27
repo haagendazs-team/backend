@@ -41,20 +41,7 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "text": "${{ steps.slack-user.outputs.mention }} PR을 올렸습니다.",
-              "attachments": [
-                {
-                  "color": "#36a64f",
-                  "fields": [
-                    {
-                      "title": "${{ github.event.pull_request.title }}",
-                      "value": "${{ github.event.pull_request.html_url }}",
-                      "short": false
-                    }
-                  ],
-                  "footer": "${{ github.repository }} • ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}"
-                }
-              ]
+              "text": ":bell: *PR Opened*\nPR 제목: ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})\n작성자: ${{ steps.slack-user.outputs.mention }}\n링크: ${{ github.event.pull_request.html_url }}"
             }
 
       - name: Notify PR merged
@@ -65,18 +52,5 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
-              "text": "${{ steps.slack-user.outputs.mention }} PR이 머지됐습니다.",
-              "attachments": [
-                {
-                  "color": "#6f42c1",
-                  "fields": [
-                    {
-                      "title": "${{ github.event.pull_request.title }}",
-                      "value": "${{ github.event.pull_request.html_url }}",
-                      "short": false
-                    }
-                  ],
-                  "footer": "${{ github.repository }} • ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}"
-                }
-              ]
+              "text": ":white_check_mark: *PR Merged*\nPR 제목: ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})\n작성자: ${{ steps.slack-user.outputs.mention }}\n링크: ${{ github.event.pull_request.html_url }}"
             }
