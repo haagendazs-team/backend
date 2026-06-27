@@ -1,0 +1,82 @@
+name: Slack Notification
+
+on:
+  pull_request:
+    branches: [ develop ]
+    types: [ opened, closed ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve Slack user ID
+        id: slack-user
+        run: |
+          declare -A MAP
+          MAP["JHKoder"]="U0BCX3GNMKP"
+          MAP["mjkkim"]="U0BD0RQJZ6E"
+          MAP["zzimzzim"]="U0BD4F2FGJG"
+          MAP["jeonggugo"]="U0BD3SMFP43"
+          MAP["sangwookkhu"]="U0BCV0GSH1D"
+
+          GITHUB_USER="${{ github.event.pull_request.user.login }}"
+          SLACK_ID="${MAP[$GITHUB_USER]:-}"
+
+          if [ -n "$SLACK_ID" ]; then
+            echo "mention=<@${SLACK_ID}>" >> "$GITHUB_OUTPUT"
+          else
+            echo "mention=${GITHUB_USER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify PR opened
+        if: github.event.action == 'opened'
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ steps.slack-user.outputs.mention }} PR을 올렸습니다.",
+              "attachments": [
+                {
+                  "color": "#36a64f",
+                  "fields": [
+                    {
+                      "title": "${{ github.event.pull_request.title }}",
+                      "value": "${{ github.event.pull_request.html_url }}",
+                      "short": false
+                    }
+                  ],
+                  "footer": "${{ github.repository }} • ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}"
+                }
+              ]
+            }
+
+      - name: Notify PR merged
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ steps.slack-user.outputs.mention }} PR이 머지됐습니다.",
+              "attachments": [
+                {
+                  "color": "#6f42c1",
+                  "fields": [
+                    {
+                      "title": "${{ github.event.pull_request.title }}",
+                      "value": "${{ github.event.pull_request.html_url }}",
+                      "short": false
+                    }
+                  ],
+                  "footer": "${{ github.repository }} • ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}"
+                }
+              ]
+            }
