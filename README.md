@@ -49,7 +49,9 @@ GITHUB_CONFIG_SERVER=
 FRONT_URI=http://localhost:3000
 ```
 
-### docker.sh 사용법
+### 방법 1 — docker.sh (권장)
+
+
 
 ```bash
 ./docker.sh up                        # 전체 스택 기동
@@ -74,6 +76,38 @@ FRONT_URI=http://localhost:3000
 ```bash
 ./docker.sh scale member 2   # member 인스턴스 2개로 확장
 ./docker.sh scale member 1   # 가장 오래된 컨테이너 순으로 축소
+```
+
+### 방법 2 — Gradle (Docker 없이, JVM 직접 실행)
+
+빌드 후 전체 서비스를 순서대로 백그라운드 실행합니다. 로그는 `logs/<service>.log`에 저장됩니다.
+
+```bash
+# 전체 기동
+./gradlew startAll
+
+# 전체 종료
+./gradlew stopAll
+```
+
+특정 서비스만 실행하려면 인프라(Docker)를 먼저 올린 뒤 해당 모듈에서 실행합니다.
+
+```bash
+# 인프라 기동 (postgres, redis, kafka 등)
+docker compose -f docker-compose.local.yml up -d postgres redis kafka
+
+# 특정 서비스 단독 실행
+./gradlew :notification:localRun
+```
+
+### 방법 3 — docker compose 직접
+
+```bash
+# 전체 기동
+docker compose -f docker-compose.local.yml up -d
+
+# 전체 종료
+docker compose -f docker-compose.local.yml down
 ```
 
 ### 모니터링 포함 실행
