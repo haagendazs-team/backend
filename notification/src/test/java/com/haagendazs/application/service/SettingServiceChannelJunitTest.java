@@ -2,7 +2,7 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.application.dto.ChannelResult;
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.Channel;
 import com.haagendazs.domain.model.ChannelType;
 import com.haagendazs.domain.repository.ChannelRepository;
@@ -70,7 +70,7 @@ class SettingServiceChannelJunitTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
+                        .isEqualTo(NotificationErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
     }
 
     @Test
@@ -86,7 +86,7 @@ class SettingServiceChannelJunitTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.NOTIFICATION_CHANNEL_LIMIT_EXCEEDED));
+                        .isEqualTo(NotificationErrorCode.NOTIFICATION_CHANNEL_LIMIT_EXCEEDED));
     }
 
     @Test
@@ -115,7 +115,7 @@ class SettingServiceChannelJunitTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND));
+                        .isEqualTo(NotificationErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND));
     }
 
     @Test
@@ -138,7 +138,7 @@ class SettingServiceChannelJunitTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND));
+                        .isEqualTo(NotificationErrorCode.NOTIFICATION_CHANNEL_NOT_FOUND));
     }
 
     @Test

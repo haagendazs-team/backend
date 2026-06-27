@@ -3,7 +3,7 @@ package com.haagendazs.application.service;
 import com.haagendazs.application.dto.SettingResult;
 import com.haagendazs.application.dto.UpdateSettingCommand;
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.common.exception.ErrorCode;
+import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.model.SettingEntry;
 import com.haagendazs.domain.repository.ChannelRepository;
@@ -165,6 +165,6 @@ class SettingServiceJunitTest {
         assertThatThrownBy(result::block)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.EVENT_TYPE_NOT_FOUND));
+                        .isEqualTo(NotificationErrorCode.EVENT_TYPE_NOT_FOUND));
     }
 }
