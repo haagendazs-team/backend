@@ -8,6 +8,9 @@ plugins {
 // 마이그레이션: Flyway V{n}__{설명}.sql — 추가만 가능, 수정 금지
 // 동시성: 결제는 핵심 도메인 — Optimistic/Pessimistic Lock 전략 신중히 선택할 것
 // QueryDSL 사용 시 루트 build.gradle의 querydslVersion 참조하여 의존성 추가
+repositories {
+    mavenCentral()
+}
 dependencies {
     implementation project(':common')
 
@@ -20,4 +23,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     runtimeOnly 'org.postgresql:postgresql'
+
+    //lombok
+    compileOnly("org.projectlombok:lombok:1.18.46")
+    annotationProcessor("org.projectlombok:lombok:1.18.46")
+
+    testCompileOnly("org.projectlombok:lombok:1.18.46")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.46")
 }
