@@ -3,6 +3,7 @@ package com.haagendazs.presentation.controller;
 import com.haagendazs.application.dto.UpdateSettingCommand;
 import com.haagendazs.application.service.NotificationService;
 import com.haagendazs.application.service.SettingService;
+import com.haagendazs.application.service.SsePingAckService;
 import com.haagendazs.presentation.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class NotificationController {
 
     private final NotificationService notificationService;
     private final SettingService notificationSettingService;
+    private final SsePingAckService ssePingAckService;
 
     // ── 인박스 ──
 
@@ -52,8 +54,26 @@ public class NotificationController {
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<Object>> subscribe(@RequestHeader("X-Member-Id") Long memberId) {
-        return notificationService.subscribe(memberId);
+    public Flux<ServerSentEvent<Object>> subscribe(
+            @RequestHeader("X-Member-Id") Long memberId,
+            @RequestHeader(value = "Last-Event-ID", required = false) Long lastEventId
+    ) {
+        return notificationService.subscribe(memberId, lastEventId);
+    }
+
+    @PostMapping("/stream/ack")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> ackPing(
+            @RequestHeader("X-Member-Id") Long memberId,
+            @Valid @RequestBody PingAckRequest request
+    ) {
+        ssePingAckService.record(memberId, request.status(), request.pingReceivedAt());
+        return Mono.empty();
+    }
+
+    @GetMapping("/stream/ping-result")
+    public Mono<PingResultResponse> getPingResult(@RequestHeader("X-Member-Id") Long memberId) {
+        return Mono.just(ssePingAckService.query(memberId));
     }
 
     // ── 설정 ──

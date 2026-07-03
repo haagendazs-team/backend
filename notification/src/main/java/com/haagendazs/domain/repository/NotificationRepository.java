@@ -16,4 +16,5 @@ public interface NotificationRepository {
     Mono<Long> countByMemberId(Long memberId);
     Mono<Boolean> existsByEventIdAndMemberId(Long eventId, Long memberId);
     Mono<Void> markAllReadByMemberId(Long memberId);
+    Flux<Notification> findByMemberIdAndIdGreaterThanOrderByIdAsc(Long memberId, Long lastId, int limit);
 }

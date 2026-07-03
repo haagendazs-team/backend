@@ -2,8 +2,7 @@ package com.haagendazs.application.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.haagendazs.domain.model.EventTypeDefinition;
-import com.haagendazs.infrastructure.config.NotificationProperties;
+import com.haagendazs.domain.model.NotificationEnvelope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,46 +16,46 @@ import java.util.Optional;
 public class PayloadParser {
 
     private final ObjectMapper objectMapper;
-    private final NotificationProperties properties;
 
-    public Long extractMemberId(String payload, EventTypeDefinition definition) {
+    public NotificationEnvelope parse(String rawPayload) {
         try {
-            JsonNode node = objectMapper.readTree(payload);
-            JsonNode memberIdNode = node.get(definition.getMemberIdField());
-            if (memberIdNode == null || memberIdNode.isNull() || !memberIdNode.isIntegralNumber()) {
-                throw new IllegalArgumentException(
-                        "invalid " + definition.getMemberIdField() + " in " + definition.getCode() + " payload");
+            return objectMapper.readValue(rawPayload, NotificationEnvelope.class);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("envelope 파싱 실패 payload=" + rawPayload, e);
+        }
+    }
+
+    public String extractEventTypeCode(String rawPayload) {
+        try {
+            JsonNode node = objectMapper.readTree(rawPayload);
+            JsonNode codeNode = node.get("eventTypeCode");
+            if (codeNode == null || codeNode.isNull()) {
+                throw new IllegalArgumentException("eventTypeCode 누락 payload=" + rawPayload);
             }
-            return memberIdNode.longValue();
+            return codeNode.asText();
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalArgumentException(
-                    "invalid memberId in " + definition.getCode() + " payload", e);
+            throw new IllegalArgumentException("eventTypeCode 추출 실패 payload=" + rawPayload, e);
         }
     }
 
-    public Optional<LocalDateTime> extractScheduledAt(String payload, EventTypeDefinition definition) {
-        if (definition.getScheduledAtField() == null) {
-            return Optional.empty();
+    public Long extractTargetMemberId(NotificationEnvelope envelope) {
+        Long memberId = envelope.memberId();
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId 누락");
         }
-        try {
-            JsonNode node = objectMapper.readTree(payload);
-            LocalDateTime now = LocalDateTime.now();
-            return parseDateTime(node, definition.getScheduledAtField())
-                    .map(t -> t.minusMinutes(definition.getScheduledOffsetMinutes()))
-                    .filter(t -> t.isAfter(now));
-        } catch (Exception e) {
-            log.warn("scheduledAt 파싱 실패 eventType={} payload={}", definition.getCode(), payload, e);
-            return Optional.empty();
-        }
+        return memberId;
     }
 
-    private Optional<LocalDateTime> parseDateTime(JsonNode node, String fieldName) {
-        JsonNode fieldNode = node.get(fieldName);
-        if (fieldNode == null || fieldNode.isNull()) {
+    public Optional<LocalDateTime> extractScheduledAt(NotificationEnvelope envelope) {
+        if (!envelope.isScheduled()) {
             return Optional.empty();
         }
-        return Optional.of(LocalDateTime.parse(fieldNode.asText()));
+        LocalDateTime scheduledAt = envelope.scheduledAt();
+        if (scheduledAt.isBefore(LocalDateTime.now())) {
+            return Optional.empty();
+        }
+        return Optional.of(scheduledAt);
     }
 }

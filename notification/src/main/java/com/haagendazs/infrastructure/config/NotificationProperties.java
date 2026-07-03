@@ -28,7 +28,7 @@ public record NotificationProperties(
 
     public record Payload(long gameStartOffsetMinutes) {}
 
-    public record Sse(long timeoutMs, String pingCron, long pingWindowMs) {}
+    public record Sse(long timeoutMs, long pingIntervalMs, String pingCron) {}
 
     public record Buffer(int maxSize, Duration flushInterval) {}
 }

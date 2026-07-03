@@ -1,5 +1,9 @@
 server:
   port: 8081
+  netty:
+    connection-timeout: 30s
+    idle-timeout: 210s
+    worker-count: 16
 
 spring:
   application:
@@ -15,8 +19,8 @@ spring:
     properties:
       schema: notification
     pool:
-      initial-size: ${R2DBC_POOL_INITIAL:2}
-      max-size: ${R2DBC_POOL_MAX:5}
+      initial-size: ${R2DBC_POOL_INITIAL:5}
+      max-size: ${R2DBC_POOL_MAX:20}
 
   # Flyway는 JDBC URL로 별도 동작 (R2DBC URL과 독립적)
   flyway:
@@ -40,12 +44,30 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    topics:
+      push: member.notif.push.v1,chat.notif.push.v1,payment.notif.push.v1
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:no-reply@haagendazs.local}
+    password: ${MAIL_PASSWORD:}
+    test-connection: false
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+  threads:
+    virtual:
+      enabled: true
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,prometheus
+  health:
+    mail:
+      enabled: false
   metrics:
     tags:
       application: notification
@@ -80,8 +102,8 @@ notification:
     game-start-offset-minutes: 30
   sse:
     timeout-ms: 1800000
-    ping-cron: "0 0/3 * * * *"
-    ping-window-ms: 30000
+    ping-interval-ms: 30000
+    ping-cron: "0/30 * * * * *"
   buffer:
     max-size: 200
     flush-interval: 500ms

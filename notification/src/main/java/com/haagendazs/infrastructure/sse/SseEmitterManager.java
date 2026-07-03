@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.application.port.SseNotificationPort;
 import com.haagendazs.domain.model.Channel;
-import com.haagendazs.domain.model.Setting;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisPubSubConfig;
 import com.haagendazs.presentation.dto.NotificationResponse;
@@ -15,28 +14,39 @@ import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class SseEmitterManager implements SseNotificationPort {
 
+    private static final String SSE_SESSION_KEY_PREFIX = "sse:online:";
+    private static final ServerSentEvent<Object> PING_EVENT =
+            ServerSentEvent.<Object>builder().event("ping").data("").build();
+
     private final NotificationProperties properties;
     private final MeterRegistry meterRegistry;
     private final ReactiveStringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+
+    @Value("${spring.application.name:notification}-${HOSTNAME:local}")
+    private String instanceId;
 
     private final Map<Long, SseSession> sessions = new ConcurrentHashMap<>();
     private Counter sentCounter;
@@ -44,23 +54,31 @@ public class SseEmitterManager implements SseNotificationPort {
 
     @PostConstruct
     void initMetrics() {
-        Gauge.builder("sse_active_connections", sessions, Map::size)
-                .register(meterRegistry);
+        Gauge.builder("sse_active_connections", sessions, Map::size).register(meterRegistry);
         sentCounter = Counter.builder("sse_sent_total").register(meterRegistry);
         sendDurationTimer = Timer.builder("sse_send_duration").register(meterRegistry);
     }
 
     @Override
-    public Flux<ServerSentEvent<Object>> subscribe(Long memberId, Setting setting, List<Channel> channels) {
-        Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().multicast().directBestEffort();
-        SseSession previous = sessions.put(memberId, new SseSession(sink, setting, channels));
+    public Flux<ServerSentEvent<Object>> subscribe(Long memberId, List<Channel> channels, Flux<ServerSentEvent<Object>> replay) {
+        Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().multicast().onBackpressureBuffer(256, false);
+        SseSession previous = sessions.put(memberId, new SseSession(sink, channels));
         if (previous != null) {
             previous.sink().tryEmitComplete();
         }
-        log.info("SSE subscribed memberId={}", memberId);
 
-        return sink.asFlux()
-                .timeout(Duration.ofMillis(properties.sse().timeoutMs()))
+        Duration sessionTtl = Duration.ofMillis(properties.sse().timeoutMs()).plusMinutes(1);
+        redisTemplate.opsForValue()
+                .set(SSE_SESSION_KEY_PREFIX + memberId, instanceId, sessionTtl)
+                .subscribe(null, e -> log.error("SSE 세션 Redis 등록 실패 memberId={}", memberId, e));
+
+        log.info("SSE subscribed memberId={} instanceId={}", memberId, instanceId);
+
+        long jitterMs = ThreadLocalRandom.current().nextLong(-30_000, 30_000);
+        long sessionTimeoutMs = properties.sse().timeoutMs() + jitterMs;
+
+        return Flux.concat(replay, sink.asFlux())
+                .timeout(Duration.ofMillis(sessionTimeoutMs))
                 .doFinally(signal -> {
                     sessions.compute(memberId, (id, current) -> {
                         if (current != null && current.sink() == sink) {
@@ -68,8 +86,11 @@ public class SseEmitterManager implements SseNotificationPort {
                         }
                         return current;
                     });
+                    redisTemplate.delete(SSE_SESSION_KEY_PREFIX + memberId)
+                            .subscribe(null, e -> log.error("SSE 세션 Redis 삭제 실패 memberId={}", memberId, e));
                     log.info("SSE disconnected memberId={} reason={}", memberId, signal);
                 })
+                .onErrorResume(TimeoutException.class, e -> Flux.empty())
                 .onErrorResume(e -> {
                     meterRegistry.counter("sse_errors_total", "reason", "error").increment();
                     return Flux.empty();
@@ -99,28 +120,29 @@ public class SseEmitterManager implements SseNotificationPort {
         }
         long start = System.nanoTime();
         try {
-            ServerSentEvent<Object> event = buildEvent(response);
-            session.sink().tryEmitNext(event);
-            sentCounter.increment();
+            Sinks.EmitResult result = session.sink().tryEmitNext(buildEvent(response));
+            if (result.isSuccess()) {
+                sentCounter.increment();
+            } else {
+                log.warn("SSE 알림 emit 드롭 memberId={} result={}", memberId, result);
+                meterRegistry.counter("sse_errors_total", "reason", "emit_dropped").increment();
+            }
         } finally {
             sendDurationTimer.record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
     }
 
-    @Scheduled(cron = "${notification.sse.ping-cron}")
-    public void evictDeadSessions() {
-        ServerSentEvent<Object> ping = ServerSentEvent.builder().comment("ping").build();
-        sessions.forEach((memberId, session) -> {
-            Sinks.EmitResult result = session.sink().tryEmitNext(ping);
-            if (result.isFailure()) {
-                sessions.remove(memberId, session);
-            }
-        });
+    @Scheduled(fixedRate = 30000)
+    public void sendHeartbeat() {
+        int active = sessions.size();
+        sessions.forEach((memberId, session) ->
+                session.sink().emitNext(PING_EVENT, Sinks.EmitFailureHandler.FAIL_FAST));
+        log.info("heartbeat 완료 active={}", active);
     }
 
     @Override
-    public boolean isConnected(Long memberId) {
-        return sessions.containsKey(memberId);
+    public Mono<Boolean> isConnected(Long memberId) {
+        return redisTemplate.hasKey(SSE_SESSION_KEY_PREFIX + memberId);
     }
 
     @Override
@@ -131,11 +153,27 @@ public class SseEmitterManager implements SseNotificationPort {
 
     private ServerSentEvent<Object> buildEvent(NotificationResponse response) {
         return ServerSentEvent.builder()
+                .id(String.valueOf(response.id()))
                 .event("notification")
                 .data((Object) response)
                 .build();
     }
 
-    private record SseSession(Sinks.Many<ServerSentEvent<Object>> sink, Setting setting,
-                               List<Channel> channels) {}
+    private static final class SseSession {
+        private final Sinks.Many<ServerSentEvent<Object>> sink;
+        private final List<Channel> channels;
+
+        SseSession(Sinks.Many<ServerSentEvent<Object>> sink, List<Channel> channels) {
+            this.sink = sink;
+            this.channels = channels;
+        }
+
+        Sinks.Many<ServerSentEvent<Object>> sink() {
+            return sink;
+        }
+
+        List<Channel> channels() {
+            return channels;
+        }
+    }
 }
