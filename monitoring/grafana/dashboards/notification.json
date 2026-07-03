@@ -4,22 +4,22 @@
   "metadata": {
     "name": "notification-notification",
     "namespace": "default",
-    "uid": "4f593a6a-13e5-46ff-9cfa-8863b398858b",
-    "resourceVersion": "1782051328739011",
-    "generation": 3,
-    "creationTimestamp": "2026-06-19T00:09:14Z",
+    "uid": "98acd4d7-da06-4721-bb39-4daa35d54829",
+    "resourceVersion": "1783047773014994",
+    "generation": 11,
+    "creationTimestamp": "2026-07-02T08:10:26Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "609360577150976"
+      "grafana.app/deprecatedInternalID": "937899159121920"
     },
     "annotations": {
       "grafana.app/createdBy": "access-policy:service",
       "grafana.app/managedBy": "classic-file-provisioning",
-      "grafana.app/managerId": "notification",
-      "grafana.app/sourceChecksum": "47c5ee58f73b8d8f74786c8f5f5fc95f",
+      "grafana.app/managerId": "haagendazs-backend",
+      "grafana.app/sourceChecksum": "c1cb78c5140098af30f72ac92e0c7c2a",
       "grafana.app/sourcePath": "/var/lib/grafana/dashboards/notification.json",
-      "grafana.app/sourceTimestamp": "1782051318000",
+      "grafana.app/sourceTimestamp": "1783047745000",
       "grafana.app/updatedBy": "access-policy:service",
-      "grafana.app/updatedTimestamp": "2026-06-21T14:15:28Z",
+      "grafana.app/updatedTimestamp": "2026-07-03T03:02:53Z",
       "grafana.app/folder": ""
     }
   },
@@ -132,7 +132,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -154,27 +154,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(lettuce_seconds_sum{application=\"notification\", db_operation=\"XADD\"}[1m]) / rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XADD\"}[1m]) * 1000",
-                        "legendFormat": "XADD avg (ms)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "D"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_sum{application=\"notification\", db_operation=\"XREADGROUP\"}[1m]) / rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}[1m])",
-                        "legendFormat": "XREADGROUP avg"
+                        "expr": "rate(sse_errors_total{application=\"notification\"}[1m])",
+                        "legendFormat": "error drop/s"
                       },
                       "version": "v0"
                     },
@@ -192,31 +173,12 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(lettuce_seconds_sum{application=\"notification\", db_operation=\"XPENDING\"}[1m]) / rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}[1m])",
-                        "legendFormat": "XPENDING avg"
+                        "expr": "clamp_min(-deriv(sse_active_connections{application=\"notification\"}[1m]), 0)",
+                        "legendFormat": "net drop/s"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_sum{application=\"notification\", db_operation=\"PUBLISH\"}[1m]) / rate(lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}[1m])",
-                        "legendFormat": "PUBLISH avg"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
                   }
                 }
               ],
@@ -224,10 +186,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "에러 종료 vs 전체 연결 감소 비교 — 격차 = timeout 정상 종료",
           "id": 10,
           "links": [],
-          "title": "Redis Stream Op 평균 지연",
+          "title": "SSE 연결 변화율 (connect/s vs drop/s)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -246,7 +208,7 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 5,
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -255,7 +217,7 @@
                     },
                     "insertNulls": false,
                     "lineInterpolation": "linear",
-                    "lineWidth": 1,
+                    "lineWidth": 2,
                     "pointSize": 5,
                     "scaleDistribution": {
                       "type": "linear"
@@ -284,7 +246,7 @@
                       }
                     ]
                   },
-                  "unit": "s"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -299,17 +261,19 @@
                     "max"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -331,8 +295,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "sum by (uri, method) (rate(http_server_requests_seconds_count{application=\"notification\", uri=\"/dev/events/publish\"}[1m]))",
-                        "legendFormat": "[k6] {{method}} {{uri}}"
+                        "expr": "rate(http_server_requests_seconds_count{application=\"notification\"}[1m])",
+                        "legendFormat": "req/s"
                       },
                       "version": "v0"
                     },
@@ -350,8 +314,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "sum by (uri, method) (rate(http_server_requests_seconds_count{application=\"notification\", uri=~\"/api/notifications.*\"}[1m]))",
-                        "legendFormat": "[API] {{method}} {{uri}}"
+                        "expr": "rate(http_server_requests_seconds_count{application=\"notification\", status=~\"5..\"}[1m])",
+                        "legendFormat": "5xx/s"
                       },
                       "version": "v0"
                     },
@@ -363,7 +327,7 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "전체 HTTP 요청 vs 5xx 오류율",
           "id": 11,
           "links": [],
           "title": "Notification API 요청률",
@@ -425,38 +389,7 @@
                   },
                   "unit": "reqps"
                 },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "A"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "orange",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "B"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               },
               "options": {
                 "annotations": {
@@ -469,17 +402,19 @@
                     "max"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -501,8 +436,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"notification\", uri=\"/dev/events/publish\"}[5m]))) * 1000",
-                        "legendFormat": "[k6] p99"
+                        "expr": "histogram_quantile(0.50, rate(http_server_requests_seconds_bucket{application=\"notification\"}[2m])) * 1000",
+                        "legendFormat": "p50"
                       },
                       "version": "v0"
                     },
@@ -520,50 +455,12 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"notification\", uri=\"/dev/events/publish\"}[5m]))) * 1000",
-                        "legendFormat": "[k6] p50"
+                        "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{application=\"notification\"}[2m])) * 1000",
+                        "legendFormat": "p99"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.99, sum by (uri, le) (rate(http_server_requests_seconds_bucket{application=\"notification\", uri=~\"/api/notifications.*\"}[5m]))) * 1000",
-                        "legendFormat": "[API] {{uri}} p99"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.50, sum by (uri, le) (rate(http_server_requests_seconds_bucket{application=\"notification\", uri=~\"/api/notifications.*\"}[5m]))) * 1000",
-                        "legendFormat": "[API] {{uri}} p50"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "D"
                   }
                 }
               ],
@@ -571,10 +468,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "HTTP 전체 API 응답 지연",
           "id": 12,
           "links": [],
-          "title": "Notification API p99 지연",
+          "title": "Notification API p50/p99 지연 (ms)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -593,7 +490,7 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 5,
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -602,7 +499,7 @@
                     },
                     "insertNulls": false,
                     "lineInterpolation": "linear",
-                    "lineWidth": 1,
+                    "lineWidth": 2,
                     "pointSize": 5,
                     "scaleDistribution": {
                       "type": "linear"
@@ -631,70 +528,9 @@
                       }
                     ]
                   },
-                  "unit": "s"
+                  "unit": "ms"
                 },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "A"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "orange",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "B"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "yellow",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "C"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "D"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "light-blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               },
               "options": {
                 "annotations": {
@@ -707,17 +543,19 @@
                     "max"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -739,8 +577,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=\"/dev/events/publish\", status=~\"4..\"}[1m]))",
-                        "legendFormat": "[k6] 4xx"
+                        "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{application=\"notification\", uri=\"/api/notifications/stream\"}[2m])) * 1000",
+                        "legendFormat": "p99"
                       },
                       "version": "v0"
                     },
@@ -758,50 +596,12 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=\"/dev/events/publish\", status=~\"5..\"}[1m]))",
-                        "legendFormat": "[k6] 5xx"
+                        "expr": "histogram_quantile(0.50, rate(http_server_requests_seconds_bucket{application=\"notification\", uri=\"/api/notifications/stream\"}[2m])) * 1000",
+                        "legendFormat": "p50"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=~\"/api/notifications.*\", uri!=\"/api/notifications/stream\", status=~\"4..\"}[1m]))",
-                        "legendFormat": "[API] 4xx"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=~\"/api/notifications.*\", uri!=\"/api/notifications/stream\", status=~\"5..\"}[1m]))",
-                        "legendFormat": "[API] 5xx"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "D"
                   }
                 }
               ],
@@ -809,10 +609,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "SSE 연결 수락 지연만 분리 — Netty accept queue 포화 지표",
           "id": 13,
           "links": [],
-          "title": "Notification API 에러율 (4xx / 5xx)",
+          "title": "SSE /stream 엔드포인트 연결 수락 지연 (ms)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -831,7 +631,308 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 15,
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "ms"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-14": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "100 * rate(http_server_requests_seconds_count{application=\"notification\", status=~\"5..\"}[1m]) / clamp_min(rate(http_server_requests_seconds_count{application=\"notification\"}[1m]), 1)",
+                        "legendFormat": "error %"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "1분 슬라이딩 5xx 비율 — 5% 초과 시 경보",
+          "id": 14,
+          "links": [],
+          "title": "5xx 에러 비율 (%)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "percent"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-15": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}[1m])",
+                        "legendFormat": "XREADGROUP/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XACK\"}[1m])",
+                        "legendFormat": "XACK/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}[1m])",
+                        "legendFormat": "PUBLISH/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}[1m])",
+                        "legendFormat": "XPENDING/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "D"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "수신 파이프라인 전체 처리량 한 눈에 — gap = 처리 지연",
+          "id": 15,
+          "links": [],
+          "title": "서버 수신 처리 비교 — Consumer / Ping / Redis PUBLISH",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -871,68 +972,7 @@
                   },
                   "unit": "reqps"
                 },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "A"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "orange",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "B"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "dark-orange",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "C"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "D"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "dark-blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               },
               "options": {
                 "annotations": {
@@ -951,305 +991,7 @@
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
-                }
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-14": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=\"/dev/events/publish\", status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=\"/dev/events/publish\"}[5m]))",
-                        "legendFormat": "[k6] 5xx ratio"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=~\"/api/notifications.*\", uri!=\"/api/notifications/stream\", status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=\"notification\", uri=~\"/api/notifications.*\", uri!=\"/api/notifications/stream\"}[5m]))",
-                        "legendFormat": "[API] 5xx ratio"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 14,
-          "links": [],
-          "title": "Error Ratio (5xx / total)",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "max": 1,
-                  "min": 0,
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 0.01
-                      },
-                      {
-                        "color": "red",
-                        "value": 0.05
-                      }
-                    ]
-                  },
-                  "unit": "percentunit"
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "A"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "orange",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byFrameRefID",
-                      "options": "B"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "blue",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "area",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-15": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}",
-                        "legendFormat": "XREADGROUP (StreamConsumer)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}",
-                        "legendFormat": "XPENDING (PelReclaim 1min)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}",
-                        "legendFormat": "PUBLISH (ReservedDispatch 5min)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 15,
-          "links": [],
-          "title": "Scheduler Activity (XREADGROUP / XPENDING / PUBLISH)",
-          "vizConfig": {
-            "group": "timeseries",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 5,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 2,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 80
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "calcs": [
-                    "mean",
-                    "max",
-                    "last"
-                  ],
-                  "displayMode": "table",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
@@ -1369,10 +1111,10 @@
               "transformations": []
             }
           },
-          "description": "ticket.opened / game.starting / payment.completed / chat.mentioned / chat.invited 5개 stream 합산.",
+          "description": "각 Redis Stream의 XLEN — 소비보다 빠른 적재 시 급증",
           "id": 16,
           "links": [],
-          "title": "Stream Backlog 합계",
+          "title": "Redis Stream 미처리 적체 (XLEN 합계)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1438,15 +1180,13 @@
                     "hidden": false,
                     "query": {
                       "datasource": {
-                        "name": "${redis_datasource}"
+                        "name": "${datasource}"
                       },
-                      "group": "redis-datasource",
+                      "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "command": "xpending",
-                        "field": "notification-group",
-                        "keyName": "payment.completed",
-                        "type": "command"
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}[1m])",
+                        "legendFormat": "XPENDING/s"
                       },
                       "version": "v0"
                     },
@@ -1458,141 +1198,10 @@
               "transformations": []
             }
           },
-          "description": "XACK 되지 않은 실제 적체 건수. 0이 정상. 증가 시 StreamMaintenanceScheduler 동작 확인.",
+          "description": "PEL 모니터링 빈도 — 높을수록 재처리 후보가 많음",
           "id": 17,
           "links": [],
-          "title": "PEL 미확인 (payment.completed)",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 10
-                      },
-                      {
-                        "color": "red",
-                        "value": 100
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "none",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-18": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${redis_datasource}"
-                      },
-                      "group": "redis-datasource",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "command": "xlen",
-                        "keyName": "ticket.opened",
-                        "legendFormat": "ticket.opened",
-                        "type": "timeseries"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${redis_datasource}"
-                      },
-                      "group": "redis-datasource",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "command": "xlen",
-                        "keyName": "payment.completed",
-                        "legendFormat": "payment.completed",
-                        "type": "timeseries"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${redis_datasource}"
-                      },
-                      "group": "redis-datasource",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "command": "xlen",
-                        "keyName": "chat.mentioned",
-                        "legendFormat": "chat.mentioned",
-                        "type": "timeseries"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 18,
-          "links": [],
-          "title": "Stream별 XLEN 추이",
+          "title": "XPENDING 호출 속도 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -1649,7 +1258,7 @@
                       }
                     ]
                   },
-                  "unit": "short"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -1661,8 +1270,7 @@
                 "legend": {
                   "calcs": [
                     "mean",
-                    "max",
-                    "last"
+                    "max"
                   ],
                   "displayMode": "table",
                   "placement": "bottom",
@@ -1671,7 +1279,146 @@
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.0.2"
+          }
+        }
+      },
+      "panel-18": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.50, rate(lettuce_seconds_bucket{application=\"notification\", db_operation=\"XREADGROUP\"}[2m])) * 1000",
+                        "legendFormat": "p50"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.99, rate(lettuce_seconds_bucket{application=\"notification\", db_operation=\"XREADGROUP\"}[2m])) * 1000",
+                        "legendFormat": "p99"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Consumer 한 번의 XREADGROUP 왕복 지연",
+          "id": 18,
+          "links": [],
+          "title": "XREADGROUP 처리 지연 p50/p99 (ms)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "ms"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
                 }
               }
             },
@@ -1799,10 +1546,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "sendLocal() tryEmitNext 성공 누적",
           "id": 2,
           "links": [],
-          "title": "총 SSE 전송 성공 수",
+          "title": "SSE 전송 성공 수 (누적)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -1816,7 +1563,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "color": "blue",
+                        "color": "green",
                         "value": 0
                       }
                     ]
@@ -1843,7 +1590,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -1865,12 +1612,31 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "hikaricp_connections_pending{application=\"notification\"}",
-                        "legendFormat": "pending"
+                        "expr": "rate(sse_sent_total{application=\"notification\"}[1m]) * 60",
+                        "legendFormat": "sent/min"
                       },
                       "version": "v0"
                     },
                     "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sse_active_connections{application=\"notification\"}",
+                        "legendFormat": "active conn"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
                   }
                 }
               ],
@@ -1878,294 +1644,10 @@
               "transformations": []
             }
           },
-          "description": "0이 정상. 1 이상이면 DB 커넥션 풀 포화 — 알림 저장/조회 지연.",
+          "description": "전송 속도와 연결 수 비교 — diverge = 특정 세션에 과부하",
           "id": 20,
           "links": [],
-          "title": "HikariCP 대기 커넥션",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 1
-                      },
-                      {
-                        "color": "red",
-                        "value": 5
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "area",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-202": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.99, rate(hikaricp_connections_acquire_seconds_bucket{application=\"notification\"}[1m])) * 1000",
-                        "legendFormat": "acquire p99 (ms)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.50, rate(hikaricp_connections_acquire_seconds_bucket{application=\"notification\"}[1m])) * 1000",
-                        "legendFormat": "acquire p50 (ms)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "XADD → Dispatcher → DB 저장 경로에서 Hikari 커넥션 획득 지연. 브로드캐스트 팬아웃 시 급증.",
-          "id": 202,
-          "links": [],
-          "title": "HikariCP 커넥션 획득 대기 시간 (p99) — send 테스트 핵심 지표",
-          "vizConfig": {
-            "group": "timeseries",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 10,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 2,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 100
-                      },
-                      {
-                        "color": "red",
-                        "value": 1000
-                      }
-                    ]
-                  },
-                  "unit": "ms"
-                },
-                "overrides": []
-              },
-              "options": {
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "multi",
-                  "sort": "none"
-                }
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-203": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "hikaricp_connections_active{application=\"notification\"}",
-                        "legendFormat": "active"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "hikaricp_connections_pending{application=\"notification\"}",
-                        "legendFormat": "pending (대기)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "hikaricp_connections_idle{application=\"notification\"}",
-                        "legendFormat": "idle"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "hikaricp_connections_max{application=\"notification\"}",
-                        "legendFormat": "max (pool 크기)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "D"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "브로드캐스트 팬아웃 시 active 급증, pending 양 = 포화 신호.",
-          "id": 203,
-          "links": [],
-          "title": "HikariCP 커넥션 상태 (Active / Pending / Idle)",
+          "title": "SSE 전송 속도 / Active 연결 추이",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -2232,19 +1714,344 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-202": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.50, rate(lettuce_seconds_bucket{application=\"notification\", db_operation=\"PUBLISH\"}[2m])) * 1000",
+                        "legendFormat": "p50"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.99, rate(lettuce_seconds_bucket{application=\"notification\", db_operation=\"PUBLISH\"}[2m])) * 1000",
+                        "legendFormat": "p99"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Redis Pub/Sub 발행 지연 — p99 급등 시 Lettuce 포화",
+          "id": 202,
+          "links": [],
+          "title": "Redis PUBLISH 지연 p50/p99 (ms)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "ms"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-203": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "r2dbc_pool_acquired_connections{application=\"notification\"}",
+                        "legendFormat": "acquired"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "r2dbc_pool_pending_connections{application=\"notification\"}",
+                        "legendFormat": "pending"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "r2dbc_pool_idle_connections{application=\"notification\"}",
+                        "legendFormat": "idle"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "r2dbc_pool_max_allocated_connections{application=\"notification\"}",
+                        "legendFormat": "max"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "D"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "WebFlux R2DBC 반응형 DB 풀 (HikariCP 아님)",
+          "id": 203,
+          "links": [],
+          "title": "R2DBC 커넥션 풀 상태",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
           }
         }
       },
@@ -2913,10 +2720,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "notification push 1건 전송 p99",
           "id": 3,
           "links": [],
-          "title": "SSE 전송 p99 지연 (SSE 연결 시에만 유효)",
+          "title": "SSE 전송 p99 지연 (ms)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -2930,16 +2737,8 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "color": "green",
+                        "color": "orange",
                         "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 50
-                      },
-                      {
-                        "color": "red",
-                        "value": 200
                       }
                     ]
                   },
@@ -2949,7 +2748,7 @@
               },
               "options": {
                 "colorMode": "background",
-                "graphMode": "none",
+                "graphMode": "area",
                 "justifyMode": "center",
                 "orientation": "auto",
                 "percentChangeColorMode": "standard",
@@ -2965,7 +2764,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -2987,8 +2786,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "k6_notify_publish_success_rate_rate",
-                        "legendFormat": "성공률"
+                        "expr": "k6_vus",
+                        "legendFormat": "VU"
                       },
                       "version": "v0"
                     },
@@ -3000,43 +2799,36 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "현재 SSE 연결 중인 k6 VU 수",
           "id": 301,
           "links": [],
-          "title": "publish 성공률",
+          "title": "k6 Active VU",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
             "spec": {
               "fieldConfig": {
                 "defaults": {
-                  "max": 1,
-                  "min": 0,
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "color": "red",
+                        "color": "blue",
                         "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 0.95
-                      },
-                      {
-                        "color": "green",
-                        "value": 0.99
                       }
                     ]
                   },
-                  "unit": "percentunit"
+                  "unit": "short"
                 },
                 "overrides": []
               },
               "options": {
                 "colorMode": "background",
                 "graphMode": "area",
-                "justifyMode": "auto",
+                "justifyMode": "center",
                 "orientation": "auto",
                 "percentChangeColorMode": "standard",
                 "reduceOptions": {
@@ -3073,8 +2865,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "k6_notify_publish_failed_total",
-                        "legendFormat": "실패"
+                        "expr": "100 * rate(k6_sse_connect_success_total[1m]) / clamp_min(rate(k6_sse_connect_attempts_total[1m]), 1)",
+                        "legendFormat": "success %"
                       },
                       "version": "v0"
                     },
@@ -3086,41 +2878,36 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "연결 시도 대비 성공 비율",
           "id": 302,
           "links": [],
-          "title": "publish 실패 건수",
+          "title": "SSE 연결 성공률 (%)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
             "spec": {
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
                         "color": "green",
                         "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 1
-                      },
-                      {
-                        "color": "red",
-                        "value": 10
                       }
                     ]
                   },
-                  "unit": "short"
+                  "unit": "percent"
                 },
                 "overrides": []
               },
               "options": {
                 "colorMode": "background",
                 "graphMode": "area",
-                "justifyMode": "auto",
+                "justifyMode": "center",
                 "orientation": "auto",
                 "percentChangeColorMode": "standard",
                 "reduceOptions": {
@@ -3157,8 +2944,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.95, sum(rate(k6_k6_notify_publish_duration_seconds_seconds_bucket[1m])) by (le))",
-                        "legendFormat": "p95"
+                        "expr": "k6_sse_server_disconnect_total",
+                        "legendFormat": "disconnect"
                       },
                       "version": "v0"
                     },
@@ -3170,41 +2957,36 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "error_code != 1000/1050 인 비정상 종료 누적",
           "id": 303,
           "links": [],
-          "title": "publish p95 지연",
+          "title": "SSE 비정상 disconnect (누적)",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
             "spec": {
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 200
-                      },
-                      {
                         "color": "red",
-                        "value": 300
+                        "value": 0
                       }
                     ]
                   },
-                  "unit": "ms"
+                  "unit": "short"
                 },
                 "overrides": []
               },
               "options": {
                 "colorMode": "background",
                 "graphMode": "area",
-                "justifyMode": "auto",
+                "justifyMode": "center",
                 "orientation": "auto",
                 "percentChangeColorMode": "standard",
                 "reduceOptions": {
@@ -3242,11 +3024,30 @@
                       "kind": "DataQuery",
                       "spec": {
                         "expr": "k6_vus",
-                        "legendFormat": "VUs"
+                        "legendFormat": "active VU"
                       },
                       "version": "v0"
                     },
                     "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "k6_vus_max",
+                        "legendFormat": "max VU"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
                   }
                 }
               ],
@@ -3254,16 +3055,53 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "램프업 단계별 VU 수 — max와 active 격차 = 연결 실패",
           "id": 304,
           "links": [],
-          "title": "k6 활성 VU 수",
+          "title": "k6 VU 수 추이",
           "vizConfig": {
-            "group": "stat",
+            "group": "timeseries",
             "kind": "VizConfig",
             "spec": {
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
@@ -3272,12 +3110,8 @@
                         "value": 0
                       },
                       {
-                        "color": "yellow",
-                        "value": 200
-                      },
-                      {
                         "color": "red",
-                        "value": 400
+                        "value": 80
                       }
                     ]
                   },
@@ -3286,21 +3120,24 @@
                 "overrides": []
               },
               "options": {
-                "colorMode": "background",
-                "graphMode": "area",
-                "justifyMode": "auto",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
                 },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
               }
             },
             "version": "13.0.2"
@@ -3325,8 +3162,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(k6_notify_publish_success_total[30s])",
-                        "legendFormat": "성공"
+                        "expr": "rate(k6_sse_connect_attempts_total[30s])",
+                        "legendFormat": "attempts/s"
                       },
                       "version": "v0"
                     },
@@ -3344,12 +3181,50 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(k6_notify_publish_failed_total[30s])",
-                        "legendFormat": "실패"
+                        "expr": "rate(k6_sse_connect_success_total[30s])",
+                        "legendFormat": "success/s"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(k6_sse_server_disconnect_total[30s])",
+                        "legendFormat": "disconnect/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(k6_sse_pool_exhausted_total[30s])",
+                        "legendFormat": "pool_exhausted/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "D"
                   }
                 }
               ],
@@ -3357,10 +3232,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "disconnect/s spike = 서버 병목 신호",
           "id": 305,
           "links": [],
-          "title": "k6 TPS — 성공 / 실패 발행 속도",
+          "title": "SSE 연결 이벤트 속도 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3419,23 +3294,7 @@
                   },
                   "unit": "reqps"
                 },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "실패"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "red",
-                          "mode": "fixed"
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               },
               "options": {
                 "annotations": {
@@ -3443,15 +3302,18 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
@@ -3477,8 +3339,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.50, sum(rate(k6_k6_notify_publish_duration_seconds_seconds_bucket[1m])) by (le))",
-                        "legendFormat": "p50"
+                        "expr": "rate(k6_sse_replayed_total[30s])",
+                        "legendFormat": "replay/s"
                       },
                       "version": "v0"
                     },
@@ -3496,31 +3358,12 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.95, sum(rate(k6_k6_notify_publish_duration_seconds_seconds_bucket[1m])) by (le))",
-                        "legendFormat": "p95"
+                        "expr": "rate(k6_sse_session_completed_total[30s])",
+                        "legendFormat": "completed/s"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.99, sum(rate(k6_k6_notify_publish_duration_seconds_seconds_bucket[1m])) by (le))",
-                        "legendFormat": "p99"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
                   }
                 }
               ],
@@ -3528,10 +3371,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "replay/s = 재연결 시 Last-Event-ID 전송 횟수 — 유실 방지 동작 확인",
           "id": 306,
           "links": [],
-          "title": "k6 publish 지연 분포 (p50 / p95 / p99)",
+          "title": "Last-Event-ID 재연결 횟수 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3550,7 +3393,7 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 5,
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -3588,7 +3431,7 @@
                       }
                     ]
                   },
-                  "unit": "ms"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -3598,15 +3441,18 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
@@ -3633,7 +3479,7 @@
                       "kind": "DataQuery",
                       "spec": {
                         "expr": "rate(k6_http_reqs_total[30s])",
-                        "legendFormat": "http_reqs/s"
+                        "legendFormat": "total/s"
                       },
                       "version": "v0"
                     },
@@ -3651,8 +3497,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(rate(k6_http_req_failed_rate[30s])[30s])",
-                        "legendFormat": "실패/s"
+                        "expr": "rate(k6_http_req_failed_rate[30s])",
+                        "legendFormat": "failed/s"
                       },
                       "version": "v0"
                     },
@@ -3664,10 +3510,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "SSE + inbox 조회 포함 전체 HTTP 요청",
           "id": 307,
           "links": [],
-          "title": "k6 HTTP 요청 속도 (전체) — http_reqs",
+          "title": "k6 HTTP 요청 속도 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3734,15 +3580,18 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
@@ -3768,8 +3617,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "k6_vus",
-                        "legendFormat": "active VUs"
+                        "expr": "rate(k6_sse_session_completed_total[1m])",
+                        "legendFormat": "정상완료/s"
                       },
                       "version": "v0"
                     },
@@ -3787,8 +3636,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "k6_vus_max",
-                        "legendFormat": "max VUs"
+                        "expr": "rate(k6_sse_server_disconnect_total[1m])",
+                        "legendFormat": "비정상/s"
                       },
                       "version": "v0"
                     },
@@ -3800,10 +3649,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "정상 완료(timeout/EOF) vs 비정상 disconnect 비율 추이",
           "id": 308,
           "links": [],
-          "title": "k6 VU 수 추이",
+          "title": "SSE 세션 종료 추이",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -3822,7 +3671,7 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 20,
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -3860,7 +3709,7 @@
                       }
                     ]
                   },
-                  "unit": "short"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -3870,15 +3719,18 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
@@ -3984,8 +3836,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "tomcat_connections_current_connections{application=\"notification\"}",
-                        "legendFormat": "current"
+                        "expr": "http_server_requests_active_seconds_count{application=\"notification\"}",
+                        "legendFormat": "active requests"
                       },
                       "version": "v0"
                     },
@@ -4000,7 +3852,7 @@
           "description": "현재 열려 있는 TCP 연결 수 (SSE 포함)",
           "id": 32,
           "links": [],
-          "title": "Tomcat 현재 연결 수",
+          "title": "Netty 활성 HTTP 요청 수",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -4046,7 +3898,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -4068,8 +3920,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "tomcat_connections_keepalive_current_connections{application=\"notification\"}",
-                        "legendFormat": "keepalive"
+                        "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{application=\"notification\"}[1m]))",
+                        "legendFormat": "p95 latency"
                       },
                       "version": "v0"
                     },
@@ -4084,7 +3936,7 @@
           "description": "accept-count 초과 시 연결 거부 발생",
           "id": 34,
           "links": [],
-          "title": "Tomcat accept 큐 대기",
+          "title": "Netty p95 응답시간",
           "vizConfig": {
             "group": "stat",
             "kind": "VizConfig",
@@ -4130,7 +3982,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -4152,8 +4004,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "tomcat_connections_current_connections{application=\"notification\"}",
-                        "legendFormat": "Tomcat connections"
+                        "expr": "http_server_requests_active_seconds_count{application=\"notification\"}",
+                        "legendFormat": "Netty active"
                       },
                       "version": "v0"
                     },
@@ -4178,25 +4030,6 @@
                     },
                     "refId": "B"
                   }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "tomcat_connections_config_max_connections{application=\"notification\"}",
-                        "legendFormat": "max-connections"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
                 }
               ],
               "queryOptions": {},
@@ -4206,7 +4039,7 @@
           "description": "SSE active connections와 Tomcat current connections를 함께 보면 SSE가 연결 전체에서 차지하는 비율 파악 가능",
           "id": 37,
           "links": [],
-          "title": "Tomcat 연결 수 + SSE Active 추이",
+          "title": "Netty 활성 요청 + SSE Active 추이",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -4301,6 +4134,8 @@
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -4311,7 +4146,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -4333,8 +4168,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(sse_sent_total{application=\"notification\"}[1m]) * 60",
-                        "legendFormat": "sent/min"
+                        "expr": "histogram_quantile(0.50, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[2m])) * 1000",
+                        "legendFormat": "p50"
                       },
                       "version": "v0"
                     },
@@ -4352,12 +4187,31 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "sse_active_connections{application=\"notification\"}",
-                        "legendFormat": "active connections"
+                        "expr": "histogram_quantile(0.95, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[2m])) * 1000",
+                        "legendFormat": "p95"
                       },
                       "version": "v0"
                     },
                     "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.99, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[2m])) * 1000",
+                        "legendFormat": "p99"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
                   }
                 }
               ],
@@ -4365,10 +4219,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "sendLocal() 실제 왕복 지연 — Netty write backpressure 지표",
           "id": 4,
           "links": [],
-          "title": "SSE 전송 속도 (per min) / Active 연결",
+          "title": "SSE 전송 지연 p50/p95/p99 (ms)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -4387,7 +4241,7 @@
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
                     "drawStyle": "line",
-                    "fillOpacity": 0,
+                    "fillOpacity": 10,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -4396,7 +4250,7 @@
                     },
                     "insertNulls": false,
                     "lineInterpolation": "linear",
-                    "lineWidth": 1,
+                    "lineWidth": 2,
                     "pointSize": 5,
                     "scaleDistribution": {
                       "type": "linear"
@@ -4425,7 +4279,7 @@
                       }
                     ]
                   },
-                  "unit": "short"
+                  "unit": "ms"
                 },
                 "overrides": []
               },
@@ -4437,20 +4291,23 @@
                 "legend": {
                   "calcs": [
                     "mean",
-                    "max"
+                    "max",
+                    "p99"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -5088,50 +4945,12 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "histogram_quantile(0.50, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[5m]))",
-                        "legendFormat": "p50"
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}[1m])",
+                        "legendFormat": "PUBLISH/s"
                       },
                       "version": "v0"
                     },
                     "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.95, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[5m]))",
-                        "legendFormat": "p95"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "histogram_quantile(0.99, rate(sse_send_duration_seconds_bucket{application=\"notification\"}[5m]))",
-                        "legendFormat": "p99"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
                   }
                 }
               ],
@@ -5139,10 +4958,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "SSE 브로드캐스트 Redis Pub/Sub PUBLISH 속도",
           "id": 5,
           "links": [],
-          "title": "SSE 전송 지연 p50/p95/p99 (SSE 연결 시에만 유효)",
+          "title": "Redis PUBLISH 속도 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -5170,7 +4989,7 @@
                     },
                     "insertNulls": false,
                     "lineInterpolation": "linear",
-                    "lineWidth": 1,
+                    "lineWidth": 2,
                     "pointSize": 5,
                     "scaleDistribution": {
                       "type": "linear"
@@ -5199,7 +5018,7 @@
                       }
                     ]
                   },
-                  "unit": "s"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -5211,21 +5030,22 @@
                 "legend": {
                   "calcs": [
                     "mean",
-                    "max",
-                    "p99"
+                    "max"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -5392,6 +5212,8 @@
                     "max"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -5402,7 +5224,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -5595,6 +5417,8 @@
                     "lastNotNull"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -5605,206 +5429,7 @@
                 }
               }
             },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-511": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "process_files_open_files{application=\"notification\"}",
-                        "legendFormat": "Open FDs"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "process_files_max_files{application=\"notification\"}",
-                        "legendFormat": "Max FDs"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "process_files_open_files{application=\"notification\"} / process_files_max_files{application=\"notification\"} * 100",
-                        "legendFormat": "FD 사용률 (%)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "열린 파일 디스크립터 수, 최대 FD, 사용률. SSE 연결당 FD 1개 소비.",
-          "id": 511,
-          "links": [],
-          "title": "FD 사용량 / 사용률",
-          "vizConfig": {
-            "group": "timeseries",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 10,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "never",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 80
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": [
-                  {
-                    "matcher": {
-                      "id": "byName",
-                      "options": "FD 사용률 (%)"
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.axisPlacement",
-                        "value": "right"
-                      },
-                      {
-                        "id": "custom.axisLabel",
-                        "value": "FD 사용률 (%)"
-                      },
-                      {
-                        "id": "unit",
-                        "value": "percent"
-                      },
-                      {
-                        "id": "min",
-                        "value": 0
-                      },
-                      {
-                        "id": "max",
-                        "value": 100
-                      },
-                      {
-                        "id": "color",
-                        "value": {
-                          "fixedColor": "orange",
-                          "mode": "fixed"
-                        }
-                      },
-                      {
-                        "id": "custom.lineWidth",
-                        "value": 2
-                      }
-                    ]
-                  }
-                ]
-              },
-              "options": {
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "calcs": [
-                    "mean",
-                    "max",
-                    "lastNotNull"
-                  ],
-                  "displayMode": "table",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "multi",
-                  "sort": "none"
-                }
-              }
-            },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6042,6 +5667,8 @@
                     "lastNotNull"
                   ],
                   "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -6052,7 +5679,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6336,7 +5963,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6525,6 +6152,8 @@
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -6535,7 +6164,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6557,8 +6186,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "hikaricp_connections_active{application=\"notification\"}",
-                        "legendFormat": "active"
+                        "expr": "r2dbc_pool_acquired_connections{application=\"notification\"}",
+                        "legendFormat": "acquired"
                       },
                       "version": "v0"
                     },
@@ -6576,8 +6205,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "hikaricp_connections_pending{application=\"notification\"}",
-                        "legendFormat": "pending (대기)"
+                        "expr": "r2dbc_pool_pending_connections{application=\"notification\"}",
+                        "legendFormat": "pending"
                       },
                       "version": "v0"
                     },
@@ -6595,7 +6224,7 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "hikaricp_connections_idle{application=\"notification\"}",
+                        "expr": "r2dbc_pool_idle_connections{application=\"notification\"}",
                         "legendFormat": "idle"
                       },
                       "version": "v0"
@@ -6614,8 +6243,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "hikaricp_connections_max{application=\"notification\"}",
-                        "legendFormat": "max (pool 크기)"
+                        "expr": "r2dbc_pool_max_allocated_connections{application=\"notification\"}",
+                        "legendFormat": "max"
                       },
                       "version": "v0"
                     },
@@ -6630,7 +6259,7 @@
           "description": "브로드캐스트 팬아웃 시 active 급증, pending 양 = 포화 신호.",
           "id": 515,
           "links": [],
-          "title": "HikariCP 커넥션 상태 (Active / Pending / Idle)",
+          "title": "R2DBC 커넥션 풀 (Acquired / Pending / Idle / Max)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -6699,6 +6328,8 @@
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -6709,7 +6340,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6796,7 +6427,7 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -6885,11 +6516,11 @@
                 "wideLayout": true
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
-      "panel-518": {
+      "panel-519": {
         "kind": "Panel",
         "spec": {
           "data": {
@@ -6907,8 +6538,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "jvm_gc_pause_seconds_max{application=\"notification\"}",
-                        "legendFormat": "GC max {{action}}"
+                        "expr": "rate(sse_ping_duration_seconds_sum{application=\"notification\"}[1m]) / rate(sse_ping_duration_seconds_count{application=\"notification\"}[1m]) * 1000",
+                        "legendFormat": "ping avg (ms)"
                       },
                       "version": "v0"
                     },
@@ -6926,8 +6557,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "rate(jvm_gc_pause_seconds_sum{application=\"notification\"}[1m]) / rate(jvm_gc_pause_seconds_count{application=\"notification\"}[1m])",
-                        "legendFormat": "GC avg {{action}}"
+                        "expr": "sse_active_connections{application=\"notification\"}",
+                        "legendFormat": "active connections"
                       },
                       "version": "v0"
                     },
@@ -6939,10 +6570,10 @@
               "transformations": []
             }
           },
-          "description": "",
-          "id": 518,
+          "description": "evictDeadSessions() 실행 시간. active 연결 수가 많을수록 늘어남.",
+          "id": 519,
           "links": [],
-          "title": "GC Pause 추이 (p99 / max)",
+          "title": "SSE Ping 총 소요 시간 (active count 기준)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -6977,7 +6608,7 @@
                     },
                     "showPoints": "auto",
                     "showValues": false,
-                    "spanNulls": false,
+                    "spanNulls": true,
                     "stacking": {
                       "group": "A",
                       "mode": "none"
@@ -6999,9 +6630,26 @@
                       }
                     ]
                   },
-                  "unit": "s"
+                  "unit": "ms"
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "active connections"
+                    },
+                    "properties": [
+                      {
+                        "id": "unit",
+                        "value": "short"
+                      },
+                      {
+                        "id": "custom.axisPlacement",
+                        "value": "right"
+                      }
+                    ]
+                  }
+                ]
               },
               "options": {
                 "annotations": {
@@ -7009,11 +6657,10 @@
                   "multiLane": false
                 },
                 "legend": {
-                  "calcs": [
-                    "mean",
-                    "max"
-                  ],
-                  "displayMode": "table",
+                  "calcs": [],
+                  "displayMode": "list",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
                   "placement": "bottom",
                   "showLegend": true
                 },
@@ -7024,7 +6671,7 @@
                 }
               }
             },
-            "version": "13.0.2"
+            "version": "13.1.0"
           }
         }
       },
@@ -7046,8 +6693,8 @@
                       "group": "prometheus",
                       "kind": "DataQuery",
                       "spec": {
-                        "expr": "increase(lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}[5m])",
-                        "legendFormat": "XPENDING/5m"
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}[1m])",
+                        "legendFormat": "consumed/s"
                       },
                       "version": "v0"
                     },
@@ -7059,328 +6706,10 @@
               "transformations": []
             }
           },
-          "description": "",
+          "description": "Consumer가 Redis Stream에서 메시지를 꺼내는 속도",
           "id": 6,
           "links": [],
-          "title": "XPENDING 호출 수 (PEL 모니터)",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 10
-                      },
-                      {
-                        "color": "red",
-                        "value": 50
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "none",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-7": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}",
-                        "legendFormat": "total"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 7,
-          "links": [],
-          "title": "XREADGROUP 총 폴링 수",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 100
-                      },
-                      {
-                        "color": "red",
-                        "value": 1000
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "area",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-8": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}",
-                        "legendFormat": "PUBLISH/5m"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 8,
-          "links": [],
-          "title": "Redis PUBLISH 호출 수",
-          "vizConfig": {
-            "group": "stat",
-            "kind": "VizConfig",
-            "spec": {
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 1
-                      },
-                      {
-                        "color": "red",
-                        "value": 5
-                      }
-                    ]
-                  },
-                  "unit": "short"
-                },
-                "overrides": []
-              },
-              "options": {
-                "colorMode": "background",
-                "graphMode": "none",
-                "justifyMode": "center",
-                "orientation": "auto",
-                "percentChangeColorMode": "standard",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showPercentChange": false,
-                "textMode": "auto",
-                "wideLayout": true
-              }
-            },
-            "version": "13.0.2"
-          }
-        }
-      },
-      "panel-9": {
-        "kind": "Panel",
-        "spec": {
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XADD\"}[1m])",
-                        "legendFormat": "XADD (발행)"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "D"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XREADGROUP\"}[1m])",
-                        "legendFormat": "XREADGROUP"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "A"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XPENDING\"}[1m])",
-                        "legendFormat": "XPENDING"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "B"
-                  }
-                },
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "hidden": false,
-                    "query": {
-                      "datasource": {
-                        "name": "${datasource}"
-                      },
-                      "group": "prometheus",
-                      "kind": "DataQuery",
-                      "spec": {
-                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"PUBLISH\"}[1m])",
-                        "legendFormat": "PUBLISH"
-                      },
-                      "version": "v0"
-                    },
-                    "refId": "C"
-                  }
-                }
-              ],
-              "queryOptions": {},
-              "transformations": []
-            }
-          },
-          "description": "",
-          "id": 9,
-          "links": [],
-          "title": "Redis Stream Ops Rate (per sec)",
+          "title": "XREADGROUP 소비 처리량 (per sec)",
           "vizConfig": {
             "group": "timeseries",
             "kind": "VizConfig",
@@ -7437,7 +6766,7 @@
                       }
                     ]
                   },
-                  "unit": "ops"
+                  "unit": "reqps"
                 },
                 "overrides": []
               },
@@ -7458,11 +6787,710 @@
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "multi",
-                  "sort": "none"
+                  "sort": "desc"
                 }
               }
             },
             "version": "13.0.2"
+          }
+        }
+      },
+      "panel-601": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sse_ping_window_total{application=\"notification\"}",
+                        "legendFormat": "전체 수신"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sse_ping_window_success{application=\"notification\"}",
+                        "legendFormat": "성공"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "현재 1분 슬라이딩 윈도우 — Gauge이므로 스크레이프 간격(5s/15s/30s)마다 최신값 반영",
+          "id": 601,
+          "links": [],
+          "title": "Ping 수신 현황 (1분 윈도우 Gauge)",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-602": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "clamp_min(1 - sse_ping_window_success{application=\"notification\"} / clamp_min(sse_ping_window_total{application=\"notification\"}, 1), 0)",
+                        "legendFormat": "손실률"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "1분 윈도우 ping 손실률 — 0에 가까울수록 양호 (Gauge 기반, 스크레이프마다 갱신)",
+          "id": 602,
+          "links": [],
+          "title": "Ping 손실률 (1분 윈도우)",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 0.05
+                      },
+                      {
+                        "color": "red",
+                        "value": 0.2
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-603": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "increase(sse_notification_result{application=\"notification\", status=\"성공\"}[30s])",
+                        "legendFormat": "성공 (30s)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "increase(sse_notification_result{application=\"notification\", status=\"유실\"}[30s])",
+                        "legendFormat": "유실 (30s)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "increase(sse_notification_result{application=\"notification\", status=\"실패\"}[30s])",
+                        "legendFormat": "실패 (30s)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "30초 슬라이딩 윈도우 ack 트렌드 — 스크레이프 간격에 따라 5초/15초/30초 단위로 확인 가능 (PromQL increase)",
+          "id": 603,
+          "links": [],
+          "title": "Ping Ack 트렌드 — 성공/유실/실패 (30s)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "유실 (30s)"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "실패 (30s)"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "red",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(lettuce_seconds_count{application=\"notification\", db_operation=\"XACK\"}[1m])",
+                        "legendFormat": "acked/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "정상 처리 후 XACK 속도 — XREADGROUP 대비 낮으면 처리 지연",
+          "id": 7,
+          "links": [],
+          "title": "XACK 확인 처리량 (per sec)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.0.2"
+          }
+        }
+      },
+      "panel-8": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sse_active_connections{application=\"notification\"}",
+                        "legendFormat": "active"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "ConcurrentHashMap 현재 세션 수",
+          "id": 8,
+          "links": [],
+          "title": "현재 Active SSE 연결",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "blue",
+                        "value": 0
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "area",
+                "justifyMode": "center",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.1.0"
+          }
+        }
+      },
+      "panel-9": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "rate(sse_errors_total{application=\"notification\"}[1m])",
+                        "legendFormat": "error/s"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "onErrorResume 포착 오류 속도",
+          "id": 9,
+          "links": [],
+          "title": "SSE 오류 발생률 (per sec)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "enableFacetedFilter": false,
+                  "overflow": "ellipsis",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.1.0"
           }
         }
       }
@@ -7551,7 +7579,7 @@
                           "kind": "ElementReference",
                           "name": "panel-37"
                         },
-                        "height": 9,
+                        "height": 7,
                         "width": 9,
                         "x": 0,
                         "y": 3
@@ -7562,9 +7590,9 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-510"
+                          "name": "panel-514"
                         },
-                        "height": 9,
+                        "height": 7,
                         "width": 8,
                         "x": 9,
                         "y": 3
@@ -7575,9 +7603,9 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-514"
+                          "name": "panel-519"
                         },
-                        "height": 9,
+                        "height": 7,
                         "width": 7,
                         "x": 17,
                         "y": 3
@@ -7590,36 +7618,10 @@
                           "kind": "ElementReference",
                           "name": "panel-512"
                         },
-                        "height": 9,
+                        "height": 7,
                         "width": 9,
                         "x": 0,
-                        "y": 12
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-511"
-                        },
-                        "height": 9,
-                        "width": 8,
-                        "x": 9,
-                        "y": 12
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-502"
-                        },
-                        "height": 9,
-                        "width": 7,
-                        "x": 17,
-                        "y": 12
+                        "y": 10
                       }
                     },
                     {
@@ -7629,23 +7631,10 @@
                           "kind": "ElementReference",
                           "name": "panel-515"
                         },
-                        "height": 6,
-                        "width": 9,
-                        "x": 0,
-                        "y": 21
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-518"
-                        },
-                        "height": 6,
+                        "height": 7,
                         "width": 8,
                         "x": 9,
-                        "y": 21
+                        "y": 10
                       }
                     },
                     {
@@ -7655,10 +7644,36 @@
                           "kind": "ElementReference",
                           "name": "panel-513"
                         },
-                        "height": 6,
+                        "height": 7,
                         "width": 7,
                         "x": 17,
-                        "y": 21
+                        "y": 10
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-510"
+                        },
+                        "height": 7,
+                        "width": 9,
+                        "x": 0,
+                        "y": 17
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-502"
+                        },
+                        "height": 7,
+                        "width": 8,
+                        "x": 9,
+                        "y": 17
                       }
                     }
                   ]
@@ -7670,7 +7685,7 @@
           {
             "kind": "RowsLayoutRow",
             "spec": {
-              "collapse": true,
+              "collapse": false,
               "layout": {
                 "kind": "GridLayout",
                 "spec": {
@@ -7719,7 +7734,7 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-20"
+                          "name": "panel-601"
                         },
                         "height": 4,
                         "width": 4,
@@ -7732,10 +7747,36 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
+                          "name": "panel-20"
+                        },
+                        "height": 4,
+                        "width": 4,
+                        "x": 16,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-602"
+                        },
+                        "height": 4,
+                        "width": 4,
+                        "x": 20,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
                           "name": "panel-4"
                         },
                         "height": 8,
-                        "width": 12,
+                        "width": 8,
                         "x": 0,
                         "y": 4
                       }
@@ -7748,8 +7789,21 @@
                           "name": "panel-5"
                         },
                         "height": 8,
-                        "width": 12,
-                        "x": 12,
+                        "width": 8,
+                        "x": 8,
+                        "y": 4
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-203"
+                        },
+                        "height": 8,
+                        "width": 8,
+                        "x": 16,
                         "y": 4
                       }
                     },
@@ -7761,7 +7815,7 @@
                           "name": "panel-202"
                         },
                         "height": 8,
-                        "width": 12,
+                        "width": 8,
                         "x": 0,
                         "y": 12
                       }
@@ -7771,11 +7825,24 @@
                       "spec": {
                         "element": {
                           "kind": "ElementReference",
-                          "name": "panel-203"
+                          "name": "panel-13"
                         },
                         "height": 8,
-                        "width": 12,
-                        "x": 12,
+                        "width": 8,
+                        "x": 8,
+                        "y": 12
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-603"
+                        },
+                        "height": 8,
+                        "width": 8,
+                        "x": 16,
                         "y": 12
                       }
                     },
@@ -7787,7 +7854,7 @@
                           "name": "panel-9"
                         },
                         "height": 8,
-                        "width": 12,
+                        "width": 8,
                         "x": 0,
                         "y": 20
                       }
@@ -7800,22 +7867,9 @@
                           "name": "panel-10"
                         },
                         "height": 8,
-                        "width": 12,
-                        "x": 12,
+                        "width": 8,
+                        "x": 8,
                         "y": 20
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-11"
-                        },
-                        "height": 8,
-                        "width": 12,
-                        "x": 0,
-                        "y": 28
                       }
                     },
                     {
@@ -7826,22 +7880,9 @@
                           "name": "panel-12"
                         },
                         "height": 8,
-                        "width": 12,
-                        "x": 12,
-                        "y": 28
-                      }
-                    },
-                    {
-                      "kind": "GridLayoutItem",
-                      "spec": {
-                        "element": {
-                          "kind": "ElementReference",
-                          "name": "panel-13"
-                        },
-                        "height": 8,
-                        "width": 12,
-                        "x": 0,
-                        "y": 36
+                        "width": 8,
+                        "x": 16,
+                        "y": 20
                       }
                     },
                     {
@@ -7852,15 +7893,28 @@
                           "name": "panel-14"
                         },
                         "height": 8,
-                        "width": 6,
-                        "x": 12,
-                        "y": 36
+                        "width": 8,
+                        "x": 8,
+                        "y": 28
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-11"
+                        },
+                        "height": 8,
+                        "width": 8,
+                        "x": 16,
+                        "y": 28
                       }
                     }
                   ]
                 }
               },
-              "title": "📤 B. 전송 (Send / Publish) — Redis Stream & API"
+              "title": "📤 B. SSE Ping 전송 — 성공률 · 지연 · 세션 품질"
             }
           },
           {
@@ -7952,7 +8006,7 @@
                   ]
                 }
               },
-              "title": "📥 C. 수신 (Receive) — Consumer & Queue Depth & PEL"
+              "title": "📥 C. 서버 수신 처리 — Stream Consumer · PEL · 처리량"
             }
           },
           {
@@ -8175,7 +8229,7 @@
                   ]
                 }
               },
-              "title": "🔥 E. k6 부하 테스트 — TPS / 지연 / 성공률"
+              "title": "🔥 E. k6 SSE 부하테스트 — VU · 연결 성공률 · Last-Event-ID"
             }
           },
           {
