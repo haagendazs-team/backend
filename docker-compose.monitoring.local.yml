@@ -1,4 +1,4 @@
-# 로컬 모니터링 스택 — prometheus(local) + grafana
+ # 로컬 모니터링 스택 — prometheus(local) + grafana
 # 사용법: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
 
 services:
@@ -7,6 +7,7 @@ services:
     container_name: haagendazs-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
     ports:
       - "9090:9090"
     volumes:
