@@ -19,26 +19,10 @@ class EventTypeRegistryJunitTest {
     @Test
     @DisplayName("등록된 정의를 code로 조회할 수 있다")
     void getByCode_returnsDefinition_whenRegistered() {
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.opened",
-                true, false, "memberId", "saleStartAt", 0);
+        EventTypeDefinition def = EventTypeDefinition.of("TICKET_OPEN", true, false);
         registry.register(def);
 
         Optional<EventTypeDefinition> result = registry.getByCode("TICKET_OPEN");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getStreamKey()).isEqualTo("notif:stream:ticket.opened");
-    }
-
-    @Test
-    @DisplayName("등록된 정의를 streamKey로 조회할 수 있다")
-    void getByStreamKey_returnsDefinition_whenRegistered() {
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.opened",
-                true, false, "memberId", "saleStartAt", 0);
-        registry.register(def);
-
-        Optional<EventTypeDefinition> result = registry.getByStreamKey("notif:stream:ticket.opened");
 
         assertThat(result).isPresent();
         assertThat(result.get().getCode()).isEqualTo("TICKET_OPEN");
@@ -51,12 +35,11 @@ class EventTypeRegistryJunitTest {
     }
 
     @Test
-    @DisplayName("getAllStreamKeys는 등록된 모든 streamKey 반환")
-    void getAllStreamKeys_returnsAllKeys() {
-        registry.register(EventTypeDefinition.of("A", "notif:stream:a", false, true, "memberId", null, 0));
-        registry.register(EventTypeDefinition.of("B", "notif:stream:b", false, true, "memberId", null, 0));
+    @DisplayName("getAllDefinitions는 등록된 모든 정의 반환")
+    void getAllDefinitions_returnsAllRegistered() {
+        registry.register(EventTypeDefinition.of("A", false, true));
+        registry.register(EventTypeDefinition.of("B", false, true));
 
-        assertThat(registry.getAllStreamKeys()).containsExactlyInAnyOrder(
-                "notif:stream:a", "notif:stream:b");
+        assertThat(registry.getAllDefinitions()).hasSize(2);
     }
 }

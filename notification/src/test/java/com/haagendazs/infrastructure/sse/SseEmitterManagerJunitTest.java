@@ -3,6 +3,7 @@ package com.haagendazs.infrastructure.sse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.haagendazs.domain.model.Channel;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisPubSubConfig;
 import com.haagendazs.presentation.dto.NotificationResponse;
@@ -18,13 +19,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
+import org.springframework.data.redis.core.ReactiveValueOperations;
+import org.springframework.http.codec.ServerSentEvent;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.lang.reflect.Field;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +44,9 @@ class SseEmitterManagerJunitTest {
 
     @Mock
     private ReactiveStringRedisTemplate redisTemplate;
+
+    @Mock
+    private ReactiveValueOperations<String, String> valueOps;
 
     @Mock
     private NotificationProperties properties;
@@ -50,9 +63,13 @@ class SseEmitterManagerJunitTest {
 
         meterRegistry = new SimpleMeterRegistry();
 
-        when(properties.sse()).thenReturn(new NotificationProperties.Sse(30000L, "0 * * * * *", 5000L));
+        when(properties.sse()).thenReturn(new NotificationProperties.Sse(30000L, 30000L, "0/30 * * * * *"));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.set(anyString(), anyString(), any(Duration.class))).thenReturn(Mono.just(true));
+        when(redisTemplate.delete(anyString())).thenReturn(Mono.just(1L));
 
         sseEmitterManager = new SseEmitterManager(properties, meterRegistry, redisTemplate, objectMapper);
+        injectInstanceId(sseEmitterManager, "notification-test");
         sseEmitterManager.initMetrics();
     }
 
@@ -110,5 +127,103 @@ class SseEmitterManagerJunitTest {
         );
 
         sseEmitterManager.sendLocal(99L, response);
+    }
+
+    @Test
+    @DisplayName("sendLocal() — emit 성공 시 sse_sent_total 카운터 증가")
+    void sendLocal_success_incrementsSentCounter() {
+        NotificationResponse response = new NotificationResponse(
+                1L, "GAME_START", "payload", false, Instant.now()
+        );
+        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+
+        sseEmitterManager.sendLocal(1L, response);
+
+        double count = meterRegistry.counter("sse_sent_total").count();
+        assertThat(count).isEqualTo(1.0);
+    }
+
+    @Test
+    @DisplayName("sendHeartbeat() — 활성 세션에 ping 이벤트 전달")
+    void sendHeartbeat_deliversPingToActiveSessions() {
+        List<ServerSentEvent<Object>> received = new ArrayList<>();
+
+        sseEmitterManager.subscribe(1L, List.of(), Flux.empty())
+                .take(1)
+                .subscribe(received::add);
+
+        sseEmitterManager.sendHeartbeat();
+
+        assertThat(received).hasSize(1);
+        assertThat(received.get(0).event()).isEqualTo("ping");
+    }
+
+    @Test
+    @DisplayName("subscribe() — 동일 memberId 재연결 시 기존 세션 종료")
+    void subscribe_reconnect_terminatesPreviousSession() {
+        List<ServerSentEvent<Object>> first = new ArrayList<>();
+
+        sseEmitterManager.subscribe(1L, List.of(), Flux.empty())
+                .subscribe(first::add, e -> {}, () -> {});
+
+        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+
+        // 이전 세션은 complete 신호로 종료되어 추가 이벤트 수신 불가
+        int countBefore = first.size();
+        sseEmitterManager.sendLocal(1L, new NotificationResponse(1L, "X", "p", false, Instant.now()));
+        assertThat(first.size()).isEqualTo(countBefore);
+    }
+
+    @Test
+    @DisplayName("sendLocal() + sendHeartbeat() 동시 호출 — FAIL_NON_SERIALIZED 없이 처리됨")
+    void sendLocal_and_sendHeartbeat_concurrent_noSerializationFailure() throws InterruptedException {
+        int threadCount = 10;
+        // sse_errors_total{reason=emit_failed} 카운터로 직렬화 실패 감지
+        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threadCount);
+
+        var executor = Executors.newFixedThreadPool(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            final int threadId = i;
+            executor.submit(() -> {
+                try {
+                    start.await();
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                if (threadId % 2 == 0) {
+                    for (int j = 0; j < 30; j++) {
+                        sseEmitterManager.sendLocal(1L, new NotificationResponse(
+                                (long) j, "EVT", "p", false, Instant.now()
+                        ));
+                    }
+                } else {
+                    for (int j = 0; j < 10; j++) {
+                        sseEmitterManager.sendHeartbeat();
+                    }
+                }
+                done.countDown();
+            });
+        }
+
+        start.countDown();
+        done.await(5, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        double failures = meterRegistry.counter("sse_errors_total", "reason", "emit_failed").count();
+        assertThat(failures).isEqualTo(0.0);
+    }
+
+    private static void injectInstanceId(SseEmitterManager target, String value) {
+        try {
+            Field field = SseEmitterManager.class.getDeclaredField("instanceId");
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

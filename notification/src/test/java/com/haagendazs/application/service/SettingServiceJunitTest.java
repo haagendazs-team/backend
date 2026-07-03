@@ -49,8 +49,7 @@ class SettingServiceJunitTest {
 
     @BeforeEach
     void setUp() {
-        enabledDef = EventTypeDefinition.of("TICKET_OPEN", "notif:stream:ticket.open",
-                false, true, "memberId", null, 0);
+        enabledDef = EventTypeDefinition.of("TICKET_OPEN", false, true);
     }
 
     @Test
@@ -93,8 +92,7 @@ class SettingServiceJunitTest {
     @DisplayName("등록된 활성 이벤트 타입이 여러 개일 때 모든 설정 항목을 반환한다")
     void getSettings_multipleEventTypes_returnsAll() {
         // GIVEN
-        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", "notif:stream:game.start",
-                false, true, "memberId", null, 0);
+        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", false, true);
         SettingEntry entry1 = SettingEntry.create(1L, "TICKET_OPEN");
         SettingEntry entry2 = SettingEntry.create(1L, "GAME_START");
         when(eventTypeRegistry.getAllDefinitions()).thenReturn(List.of(enabledDef, anotherDef));
