@@ -43,13 +43,13 @@ psql_exec() {
 
 TARGET="${1:-all}"
 NO_CLEANUP=false
-_USER_VUS=""
+_USER_VUS="24000"
 for arg in "$@"; do
     [[ "$arg" == "--noCleanUp" ]] && NO_CLEANUP=true
     [[ "$arg" =~ ^[0-9]+$ ]]     && _USER_VUS="$arg"
 done
 
-VUS="${_USER_VUS:-20000}"
+VUS="${_USER_VUS:-24000}"
 SUSTAIN_START_VUS="${SUSTAIN_START_VUS:-6000}"
 SUSTAIN_MAX_VUS="${SUSTAIN_MAX_VUS:-$VUS}"
 
@@ -274,9 +274,6 @@ case "$TARGET" in
         ;;
     sustain-direct)
         run_k6 sustain-direct.js -e MAX_VUS="$SUSTAIN_MAX_VUS" -e START_VUS="$SUSTAIN_START_VUS"
-        ;;
-    sse-v2-poc)
-        run_k6 sse-v2-poc.js -e MAX_VUS="${SUSTAIN_MAX_VUS:-500}" -e START_VUS="${SUSTAIN_START_VUS:-100}"
         ;;
     send)
         run_k6 send.js

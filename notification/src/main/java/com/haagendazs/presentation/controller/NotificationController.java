@@ -20,13 +20,9 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class NotificationController {
 
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
     private final NotificationService notificationService;
     private final SettingService notificationSettingService;
     private final SsePingAckService ssePingAckService;
-
-    // ── 인박스 ──
 
     @GetMapping
     public Flux<NotificationResponse> getNotifications(
@@ -76,7 +72,6 @@ public class NotificationController {
         return Mono.just(ssePingAckService.query(memberId));
     }
 
-    // ── 설정 ──
 
     @GetMapping("/settings")
     public Flux<SettingResponse> getSettings(@RequestHeader("X-Member-Id") Long memberId) {
@@ -94,8 +89,6 @@ public class NotificationController {
                 new UpdateSettingCommand(request.eventTypeCode(), request.enabled())
         ).map(SettingResponse::from);
     }
-
-    // ── 채널 ──
 
     @GetMapping("/channels")
     public Flux<ChannelResponse> getChannels(@RequestHeader("X-Member-Id") Long memberId) {

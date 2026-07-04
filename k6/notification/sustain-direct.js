@@ -3,15 +3,19 @@
 //
 // 흐름:
 //   SSE 연결 점진적 증가 → body 읽어 ping 감지 → 서버에 ack POST → Grafana 반영
+//   MAX_VUS 미설정 시 포트/메모리 한계까지 무제한 증가
 import { sleep } from 'k6';
 import http from 'k6/http';
 import { Counter } from 'k6/metrics';
 
 const NOTIFICATION_URL = __ENV.NOTIFICATION_URL || 'http://localhost:8081';
-const MAX_VUS          = parseInt(__ENV.MAX_VUS   || '20000', 10);
+const MAX_VUS          = parseInt(__ENV.MAX_VUS   || '0', 10);   // 0 = 무제한
 const START_VUS        = parseInt(__ENV.START_VUS || '6000',  10);
 const SEED_OFFSET      = parseInt(__ENV.K6_SEED_OFFSET || '10000', 10);
 const STEP             = 1000;
+const UNLIMITED_CAP    = 30000; // ephemeral port 여유분 기준 상한 (portrange 16384~65535 = 49151)
+
+const targetMax = MAX_VUS > 0 ? MAX_VUS : UNLIMITED_CAP;
 
 function buildStepStages(start, max, step) {
     const stages = [];
@@ -39,8 +43,8 @@ export const options = {
             startVUs: 0,
             stages: [
                 { duration: '30s', target: START_VUS },
-                ...buildStepStages(START_VUS, MAX_VUS, STEP),
-                { duration: '2m',  target: MAX_VUS },
+                ...buildStepStages(START_VUS, targetMax, STEP),
+                { duration: '2m',  target: targetMax },
                 { duration: '30s', target: 0 },
             ],
             gracefulRampDown: '30s',
@@ -53,7 +57,7 @@ export const options = {
 };
 
 export default function () {
-    const memberId = SEED_OFFSET + (__VU % MAX_VUS) + 1;
+    const memberId = SEED_OFFSET + (__VU % targetMax) + 1;
 
     let lastEventId = null;
 

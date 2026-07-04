@@ -71,6 +71,11 @@ management:
   metrics:
     tags:
       application: notification
+    enable:
+      reactor.netty: true
+  server:
+    netty:
+      metrics: true
 
 eureka:
   client:

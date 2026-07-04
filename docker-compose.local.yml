@@ -1,11 +1,5 @@
-# 로컬 개발용 인프라 + 서비스
-# 사용법: docker compose -f docker-compose.local.yml up -d
-# 모니터링 포함 시: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -d
 
 services:
-  # ───────────────────────────────────────────
-  # 인프라
-  # ───────────────────────────────────────────
   postgres:
     image: postgres:18-alpine
     container_name: haagendazs-postgres
@@ -172,10 +166,14 @@ services:
       context: ./notification
       dockerfile: Dockerfile
     mem_limit: 4g
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     sysctls:
       net.core.somaxconn: 65535
       net.ipv4.tcp_max_syn_backlog: 65535
-      net.ipv4.ip_local_port_range: "1024 65535"
+      net.ipv4.ip_local_port_range: "32768 65535"
       net.ipv4.tcp_tw_reuse: 1
       net.ipv4.tcp_fin_timeout: 15
     environment:

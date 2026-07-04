@@ -35,6 +35,29 @@ services:
       - prometheus
     restart: unless-stopped
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: haagendazs-node-exporter
+    mem_limit: 64m
+    ports:
+      - "9100:9100"
+    command:
+      - --collector.netstat
+      - --collector.sockstat
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: haagendazs-cadvisor
+    mem_limit: 128m
+    ports:
+      - "8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    restart: unless-stopped
+
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: haagendazs-postgres-exporter
