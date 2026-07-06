@@ -2,6 +2,7 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.application.dto.SettingResult;
 import com.haagendazs.application.dto.UpdateSettingCommand;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.EventTypeDefinition;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.anyString;
 
 @ExtendWith(MockitoExtension.class)
 class SettingServiceJunitTest {
@@ -44,6 +46,9 @@ class SettingServiceJunitTest {
 
     @Mock
     private NotificationProperties properties;
+
+    @Mock
+    private SettingCachePort settingCachePort;
 
     private EventTypeDefinition enabledDef;
 
@@ -119,6 +124,7 @@ class SettingServiceJunitTest {
         when(settingEntryRepository.findByMemberIdAndEventTypeCode(1L, "TICKET_OPEN"))
                 .thenReturn(Mono.just(existing));
         when(settingEntryRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(settingCachePort.isCached(1L)).thenReturn(Mono.just(false));
 
         // WHEN
         SettingResult result = settingService.updateSetting(1L,
@@ -138,6 +144,7 @@ class SettingServiceJunitTest {
         when(settingEntryRepository.findByMemberIdAndEventTypeCode(1L, "TICKET_OPEN"))
                 .thenReturn(Mono.empty());
         when(settingEntryRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(settingCachePort.isCached(1L)).thenReturn(Mono.just(false));
 
         // WHEN
         SettingResult result = settingService.updateSetting(1L,
