@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.List;
@@ -79,19 +80,20 @@ public class SseEmitterManager implements SseNotificationPort {
 
         return Flux.concat(replay, sink.asFlux())
                 .timeout(Duration.ofMillis(sessionTimeoutMs))
+                .publishOn(Schedulers.boundedElastic())
                 .doFinally(signal -> {
-                    sessions.compute(memberId, (id, current) -> {
+                    sessions.compute(memberId, (_, current) -> {
                         if (current != null && current.sink() == sink) {
                             return null;
                         }
                         return current;
                     });
-                    redisTemplate.delete(SSE_SESSION_KEY_PREFIX + memberId)
-                            .subscribe(null, e -> log.error("SSE 세션 Redis 삭제 실패 memberId={}", memberId, e));
+                    redisTemplate.delete(SSE_SESSION_KEY_PREFIX + memberId).
+                            subscribe(null, e -> log.error("SSE 세션 Redis 삭제 실패 memberId={}", memberId, e));
                     log.info("SSE disconnected memberId={} reason={}", memberId, signal);
                 })
-                .onErrorResume(TimeoutException.class, e -> Flux.empty())
-                .onErrorResume(e -> {
+                .onErrorResume(TimeoutException.class, _ -> Flux.empty())
+                .onErrorResume(_ -> {
                     meterRegistry.counter("sse_errors_total", "reason", "error").increment();
                     return Flux.empty();
                 });
@@ -132,7 +134,7 @@ public class SseEmitterManager implements SseNotificationPort {
         }
     }
 
-    @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRate = 60_000)
     public void sendHeartbeat() {
         int active = sessions.size();
         sessions.forEach((memberId, session) ->
@@ -155,7 +157,7 @@ public class SseEmitterManager implements SseNotificationPort {
         return ServerSentEvent.builder()
                 .id(String.valueOf(response.id()))
                 .event("notification")
-                .data((Object) response)
+                .data(response)
                 .build();
     }
 
