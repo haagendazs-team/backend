@@ -2,11 +2,10 @@
 // 연결 수립 → CCU 유지 → 이벤트 발행 → 수신 검증을 한 번에 실행
 //
 // 시나리오 구성:
-//   connect_ramp     — SSE 연결 수락 속도/성공률 (0~6m, ramping-arrival-rate)
-//   sustain_ccu      — 3K CCU 동시 유지 (2~12m, ramping-vus)
-//   publish_single   — payment.completed 단건 발행 TPS (2~6m, ramping-arrival-rate)
-//   publish_broadcast— ticket.opened 브로드캐스트 발행 (3~6m, ramping-arrival-rate)
-//   receive_verify   — SSE 이벤트 수신 완전성 검증 (3~9m, constant-vus)
+//   connect_ramp   — SSE 연결 수락 속도/성공률 (0~6m, ramping-arrival-rate)
+//   sustain_ccu    — 3K CCU 동시 유지 (2~12m, ramping-vus)
+//   publish_single — PAYMENT_COMPLETED 단건 발행 TPS (2~6m, ramping-arrival-rate)
+//   receive_verify — SSE 이벤트 수신 완전성 검증 (3~9m, constant-vus)
 //
 // 실행:
 //   .\run-windows.ps1 -Target all -Vus 3000
@@ -14,7 +13,7 @@ import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { fetchTokens, getTokenFromCache, getMemberId, preloadedTokens } from '../helpers/token.js';
 import { connectSseStream, classifySseResult, countNotificationEvents } from '../helpers/sse.js';
-import { publishPayment, publishBroadcast } from '../helpers/publish.js';
+import { publishPayment } from '../helpers/publish.js';
 
 const BASE_URL    = __ENV.BASE_URL   || 'http://localhost:8080';
 const MEMBER_URL  = __ENV.MEMBER_URL || 'http://localhost:8084';
@@ -99,24 +98,7 @@ export const options = {
             startTime: '2m',
         },
 
-        // D. 브로드캐스트 발행 — 3m~6m
-        publish_broadcast: {
-            executor: 'ramping-arrival-rate',
-            startRate: 1,
-            timeUnit: '1s',
-            preAllocatedVUs: 10,
-            maxVUs: 50,
-            stages: [
-                { duration: '1m',  target: 1 },
-                { duration: '1m',  target: 3 },
-                { duration: '1m',  target: 5 },
-                { duration: '30s', target: 0 },
-            ],
-            exec: 'publishBroadcastScenario',
-            startTime: '3m',
-        },
-
-        // E. 수신 검증 — 비활성화 (OOM 유발 위험)
+        // D. 수신 검증 — 비활성화 (OOM 유발 위험)
         // receive_verify: {
         //     executor: 'constant-vus',
         //     vus: 500,
@@ -201,18 +183,7 @@ export function publishSingle() {
     else    notifyPublishFailed.add(1);
 }
 
-// ── D. 브로드캐스트 발행 ─────────────────────────────────────────────────────
-export function publishBroadcastScenario() {
-    const res = publishBroadcast(__ITER);
-    notifyPublishDuration.add(res.timings.duration);
-
-    const ok = check(res, { 'ticket 브로드캐스트 발행 성공 (200)': (r) => r.status === 200 });
-    notifyPublishSuccessRate.add(ok);
-    if (ok) notifyPublishSuccess.add(1);
-    else    notifyPublishFailed.add(1);
-}
-
-// ── E. 수신 검증 (비활성화 중) ───────────────────────────────────────────────
+// ── D. 수신 검증 (비활성화 중) ───────────────────────────────────────────────
 export function receiveAndVerify(data) {
     const token = getTokenFromCache(data.tokens, __VU);
     if (!token) {
