@@ -122,7 +122,7 @@ echo ""
 
 # ── 토큰 사전 발급 (bulk API, 1000개씩 병렬) ─────────────────────
 BULK_SIZE=1000
-BATCH_PARALLEL=200
+BATCH_PARALLEL=10
 echo "▶ [tokens] ${VUS}개 토큰 사전 발급 중 (bulk ${BULK_SIZE}개씩, 병렬 ${BATCH_PARALLEL})..."
 TEMP_DIR=$(mktemp -d)
 
