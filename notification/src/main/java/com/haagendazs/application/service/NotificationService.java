@@ -4,7 +4,9 @@ import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.application.dto.NotificationResult;
 import com.haagendazs.application.port.SseNotificationPort;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.domain.repository.EventRepository;
+import com.haagendazs.domain.repository.SettingEntryRepository;
 import java.util.List;
 import com.haagendazs.domain.repository.NotificationRepository;
 import com.haagendazs.presentation.dto.NotificationResponse;
@@ -24,6 +26,8 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final EventRepository eventRepository;
     private final SseNotificationPort sseNotificationPort;
+    private final SettingEntryRepository settingEntryRepository;
+    private final SettingCachePort settingCachePort;
 
     @Transactional(readOnly = true)
     public Flux<NotificationResult> getNotifications(Long memberId, long offset, int limit) {
@@ -56,8 +60,14 @@ public class NotificationService {
     }
 
     public Flux<ServerSentEvent<Object>> subscribe(Long memberId, Long lastEventId) {
-        Flux<ServerSentEvent<Object>> replay = buildReplay(memberId, lastEventId);
-        return sseNotificationPort.subscribe(memberId, List.of(), replay);
+        Mono<Void> cacheWarmup = settingCachePort.isCached(memberId)
+                .filter(cached -> !cached)
+                .flatMap(ignored -> settingEntryRepository.findAllByMemberId(memberId)
+                        .collectList()
+                        .flatMap(entries -> settingCachePort.putAll(memberId, entries)));
+
+        return cacheWarmup
+                .thenMany(sseNotificationPort.subscribe(memberId, List.of(), buildReplay(memberId, lastEventId)));
     }
 
     private Flux<ServerSentEvent<Object>> buildReplay(Long memberId, Long lastEventId) {
@@ -65,7 +75,6 @@ public class NotificationService {
             return Flux.empty();
         }
 
-        // 맴버 id를 가지고
         return notificationRepository.findByMemberIdAndIdGreaterThanOrderByIdAsc(memberId, lastEventId, REPLAY_LIMIT)
                 .flatMap(notification -> eventRepository.findById(notification.getEventId())
                         .map(event -> NotificationResult.of(notification, event)))

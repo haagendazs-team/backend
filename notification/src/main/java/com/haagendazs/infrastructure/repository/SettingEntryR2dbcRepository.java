@@ -12,6 +12,8 @@ public interface SettingEntryR2dbcRepository extends ReactiveCrudRepository<Sett
 
     Mono<SettingEntry> findByMemberIdAndEventTypeCode(Long memberId, String eventTypeCode);
 
+    Flux<SettingEntry> findAllByMemberId(Long memberId);
+
     @Query("SELECT member_id FROM notification.setting_entries WHERE event_type_code = :eventTypeCode AND is_enabled = true LIMIT :limit OFFSET :offset")
     Flux<Long> findMemberIdsByEventTypeCode(String eventTypeCode, long offset, int limit);
 

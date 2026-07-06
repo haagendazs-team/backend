@@ -26,6 +26,11 @@ public class SettingEntryRepositoryAdapter implements SettingEntryRepository {
     }
 
     @Override
+    public Flux<SettingEntry> findAllByMemberId(Long memberId) {
+        return r2dbcRepository.findAllByMemberId(memberId);
+    }
+
+    @Override
     public Flux<Long> findMemberIdsByEventTypeCode(String eventTypeCode, long offset, int limit) {
         return r2dbcRepository.findMemberIdsByEventTypeCode(eventTypeCode, offset, limit);
     }

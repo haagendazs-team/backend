@@ -5,6 +5,7 @@ import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.application.dto.ChannelResult;
 import com.haagendazs.application.dto.SettingResult;
 import com.haagendazs.application.dto.UpdateSettingCommand;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.domain.model.Channel;
 import com.haagendazs.domain.model.ChannelType;
 import com.haagendazs.domain.model.SettingEntry;
@@ -27,6 +28,7 @@ public class SettingService {
     private final ChannelRepository channelRepository;
     private final EventTypeRegistry eventTypeRegistry;
     private final NotificationProperties properties;
+    private final SettingCachePort settingCachePort;
 
     @Transactional(readOnly = true)
     public Flux<SettingResult> getSettings(Long memberId) {
@@ -49,6 +51,10 @@ public class SettingService {
                     entry.updateEnabled(command.enabled());
                     return settingEntryRepository.save(entry);
                 })
+                .flatMap(entry -> settingCachePort.isCached(memberId)
+                        .filter(cached -> cached)
+                        .flatMap(ignored -> settingCachePort.put(memberId, entry.getEventTypeCode(), entry.isEnabled()))
+                        .thenReturn(entry))
                 .map(SettingResult::from);
     }
 
