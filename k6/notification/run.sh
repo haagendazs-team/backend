@@ -244,6 +244,8 @@ run_k6() {
     local script="$1"
     shift
     local log_file="${LOG_DIR}/$(basename "$script" .js)_$(date +%Y%m%d_%H%M%S).log"
+    local tokens_arg=""
+    [[ -f "$TOKENS_FILE" ]] && tokens_arg="-e K6_TOKENS_FILE=$TOKENS_FILE"
     echo "▶ [k6] $script 실행 중... (로그: $log_file)"
     k6 run \
         --compatibility-mode=base \
@@ -252,8 +254,8 @@ run_k6() {
         -e MEMBER_URL="$MEMBER_URL" \
         -e NOTIFICATION_URL="http://localhost:8081" \
         -e K6_SEED_OFFSET="$SEED_OFFSET" \
-        -e K6_TOKENS_FILE="$TOKENS_FILE" \
         -e MAX_VUS="$VUS" \
+        ${tokens_arg} \
         "$@" \
         "$SCRIPT_DIR/$script" 2>&1 | tee "$log_file" &
     local k6_pid=$!
