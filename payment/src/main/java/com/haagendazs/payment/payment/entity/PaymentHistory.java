@@ -1,14 +1,11 @@
 package com.haagendazs.payment.payment.entity;
 
-import com.haagendazs.payment.payment.enums.EventType;
 import com.haagendazs.payment.payment.enums.PaymentStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 //결제상태변화로그
 @Entity
@@ -16,6 +13,7 @@ import lombok.Getter;
 @Getter
 @Builder
 @AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PaymentHistory {
 
     //로그id
@@ -27,17 +25,16 @@ public class PaymentHistory {
     @Column(nullable = false)
     private Long paymentId;
 
-    //이벤트 종류
-    @Column(nullable = false)
-    private EventType eventType;
-
     //이전 상태
     @Column(nullable = true)
-    private PaymentStatus beforePaymentStatus;
+    private PaymentStatus beforeStatus;
 
     //변경 후 상태
     @Column(nullable = true)
-    private PaymentStatus afterPaymentStatus;
+    private PaymentStatus afterStatus;
+
+    @Column(nullable = true)
+    private String failCode;
 
     //상세 메시지
     @Column(nullable = true)

@@ -12,15 +12,14 @@ import java.util.ArrayList;
 
 import java.util.List;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 @Entity
 @Table(name = "orders")
 @Getter
 @Builder
 @AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Orders extends BaseEntity {
     //주문id
     @Id
@@ -60,7 +59,7 @@ public class Orders extends BaseEntity {
     private LocalDateTime orderedAt;
 
     //결제가능만료시간
-    //주문시간 + 10분
+    //주문시간 + 30분
     @Column(nullable = false)
     private LocalDateTime expiredAt;
 }

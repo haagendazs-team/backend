@@ -1,10 +1,15 @@
 package com.haagendazs.payment.product.entity;
 
 import com.haagendazs.payment.global.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
+import lombok.*;
 
+@Entity
+@Table(name = "order_items")
+@Getter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItems extends BaseEntity {
 
     //주문상품목록id
