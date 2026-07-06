@@ -56,4 +56,9 @@ public class NotificationRepositoryAdapter implements NotificationRepository {
     public Mono<Void> markAllReadByMemberId(Long memberId) {
         return r2dbcRepository.markAllReadByMemberId(memberId);
     }
+
+    @Override
+    public Flux<Notification> findByMemberIdAndIdGreaterThanOrderByIdAsc(Long memberId, Long lastId, int limit) {
+        return r2dbcRepository.findByMemberIdAndIdGreaterThanOrderByIdAsc(memberId, lastId, limit);
+    }
 }

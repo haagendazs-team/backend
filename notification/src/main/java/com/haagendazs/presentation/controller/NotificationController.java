@@ -3,6 +3,7 @@ package com.haagendazs.presentation.controller;
 import com.haagendazs.application.dto.UpdateSettingCommand;
 import com.haagendazs.application.service.NotificationService;
 import com.haagendazs.application.service.SettingService;
+import com.haagendazs.application.service.SsePingAckService;
 import com.haagendazs.presentation.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +20,9 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class NotificationController {
 
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
     private final NotificationService notificationService;
     private final SettingService notificationSettingService;
-
-    // ── 인박스 ──
+    private final SsePingAckService ssePingAckService;
 
     @GetMapping
     public Flux<NotificationResponse> getNotifications(
@@ -52,11 +50,28 @@ public class NotificationController {
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<Object>> subscribe(@RequestHeader("X-Member-Id") Long memberId) {
-        return notificationService.subscribe(memberId);
+    public Flux<ServerSentEvent<Object>> subscribe(
+            @RequestHeader("X-Member-Id") Long memberId,
+            @RequestHeader(value = "Last-Event-ID", required = false) Long lastEventId
+    ) {
+        return notificationService.subscribe(memberId, lastEventId);
     }
 
-    // ── 설정 ──
+    @PostMapping("/stream/ack")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public Mono<Void> ackPing(
+            @RequestHeader("X-Member-Id") Long memberId,
+            @Valid @RequestBody PingAckRequest request
+    ) {
+        ssePingAckService.record(memberId, request.status(), request.pingReceivedAt());
+        return Mono.empty();
+    }
+
+    @GetMapping("/stream/ping-result")
+    public Mono<PingResultResponse> getPingResult(@RequestHeader("X-Member-Id") Long memberId) {
+        return Mono.just(ssePingAckService.query(memberId));
+    }
+
 
     @GetMapping("/settings")
     public Flux<SettingResponse> getSettings(@RequestHeader("X-Member-Id") Long memberId) {
@@ -74,8 +89,6 @@ public class NotificationController {
                 new UpdateSettingCommand(request.eventTypeCode(), request.enabled())
         ).map(SettingResponse::from);
     }
-
-    // ── 채널 ──
 
     @GetMapping("/channels")
     public Flux<ChannelResponse> getChannels(@RequestHeader("X-Member-Id") Long memberId) {

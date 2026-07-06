@@ -1,11 +1,5 @@
-# 로컬 개발용 인프라 + 서비스
-# 사용법: docker compose -f docker-compose.local.yml up -d
-# 모니터링 포함 시: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.yml up -d
 
 services:
-  # ───────────────────────────────────────────
-  # 인프라
-  # ───────────────────────────────────────────
   postgres:
     image: postgres:18-alpine
     container_name: haagendazs-postgres
@@ -96,7 +90,7 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -111,15 +105,17 @@ services:
     container_name: haagendazs-config-server
     mem_limit: 384m
     environment:
+      - CONFIG_GIT_URI=${CONFIG_GIT_URI}
       - GITHUB_CONFIG_SERVER=${GITHUB_CONFIG_SERVER}
       - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8888:8888"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8888/actuator/health | grep -q 'UP'"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8888/actuator/health"]
       interval: 15s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 8
+      start_period: 30s
 
   discovery:
     build:
@@ -128,7 +124,7 @@ services:
     container_name: haagendazs-discovery
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - JAVA_TOOL_OPTIONS=-Xmx256m
     ports:
       - "8761:8761"
@@ -136,10 +132,11 @@ services:
       config-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8761/actuator/health | grep -q 'UP'"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8761/actuator/health"]
       interval: 15s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 8
+      start_period: 30s
 
   gateway:
     build:
@@ -148,7 +145,7 @@ services:
     container_name: haagendazs-gateway
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -168,9 +165,19 @@ services:
     build:
       context: ./notification
       dockerfile: Dockerfile
-    mem_limit: 384m
+    mem_limit: 4g
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    sysctls:
+      net.core.somaxconn: 65535
+      net.ipv4.tcp_max_syn_backlog: 65535
+      net.ipv4.ip_local_port_range: "32768 65535"
+      net.ipv4.tcp_tw_reuse: 1
+      net.ipv4.tcp_fin_timeout: 15
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -181,9 +188,9 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - JAVA_TOOL_OPTIONS=-Xmx256m
-    expose:
-      - "8081"
+      - JAVA_TOOL_OPTIONS=-XX:MaxMetaspaceSize=256m -Xmx1g -XX:SoftMaxHeapSize=800m -XX:+UseZGC -Dio.netty.maxDirectMemory=1073741824
+    ports:
+      - "8081:8081"
     depends_on:
       discovery:
         condition: service_healthy
@@ -200,7 +207,7 @@ services:
       dockerfile: Dockerfile
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -226,7 +233,7 @@ services:
       dockerfile: Dockerfile
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -251,7 +258,7 @@ services:
       dockerfile: Dockerfile
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -278,7 +285,7 @@ services:
       dockerfile: Dockerfile
     mem_limit: 384m
     environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
+      - EUREKA_SERVER_URI=http://discovery:8761/eureka
       - CONFIG_SERVER_URI=http://config-server:8888
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432

@@ -2,6 +2,7 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.domain.model.Event;
 import com.haagendazs.domain.model.EventTypeDefinition;
+import com.haagendazs.domain.model.NotificationEnvelope;
 import com.haagendazs.domain.repository.EventRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import lombok.RequiredArgsConstructor;
@@ -39,11 +40,10 @@ public class EventStatusService {
     }
 
     private Event buildEvent(EventTypeDefinition definition, String payload) {
-        if (definition.isScheduled()) {
-            Optional<LocalDateTime> scheduledAt = payloadParser.extractScheduledAt(payload, definition);
-            if (scheduledAt.isPresent()) {
-                return Event.createScheduled(definition.getCode(), payload, scheduledAt.get());
-            }
+        NotificationEnvelope envelope = payloadParser.parse(payload);
+        Optional<LocalDateTime> scheduledAt = payloadParser.extractScheduledAt(envelope);
+        if (scheduledAt.isPresent()) {
+            return Event.createScheduled(definition.getCode(), payload, scheduledAt.get());
         }
         return Event.create(definition.getCode(), payload);
     }

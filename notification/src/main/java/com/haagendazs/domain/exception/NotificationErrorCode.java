@@ -18,8 +18,7 @@ public enum NotificationErrorCode implements ErrorCode {
     NOTIFICATION_CHANNEL_TYPE_UNSUPPORTED(HttpStatus.BAD_REQUEST, "N007", "지원하지 않는 알림 채널 타입입니다."),
     NOTIFICATION_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "N008", "알림 발송에 실패했습니다."),
     EVENT_TYPE_NOT_FOUND(HttpStatus.NOT_FOUND, "N009", "존재하지 않는 이벤트 타입입니다."),
-    EVENT_TYPE_DUPLICATE(HttpStatus.CONFLICT, "N010", "이미 등록된 이벤트 타입입니다."),
-    EVENT_TYPE_STREAM_KEY_INVALID(HttpStatus.BAD_REQUEST, "N011", "유효하지 않은 stream key 형식입니다.");
+    EVENT_TYPE_DUPLICATE(HttpStatus.CONFLICT, "N010", "이미 등록된 이벤트 타입입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

@@ -2,9 +2,12 @@ package com.haagendazs.infrastructure.consumer;
 
 import com.haagendazs.application.service.EventStatusService;
 import com.haagendazs.application.service.FanoutService;
+import com.haagendazs.application.service.PayloadParser;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,8 +22,6 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.concurrent.ConcurrentHashMap;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -31,35 +32,79 @@ public class StreamSubscriptionManager {
     private final EventStatusService statusService;
     private final FanoutService fanoutService;
     private final EventTypeRegistry registry;
+    private final PayloadParser payloadParser;
 
     @Value("${spring.application.name:app}-consumer-${HOSTNAME:local}")
     private String consumerName;
 
-    private final ConcurrentHashMap<String, Disposable> subscriptions = new ConcurrentHashMap<>();
+    private Disposable subscription;
 
-    public void startSubscription(EventTypeDefinition definition) {
-        String streamKey = definition.getStreamKey();
-        if (subscriptions.containsKey(streamKey)) {
-            log.debug("이미 구독 중인 stream 스킵 streamKey={}", streamKey);
-            return;
-        }
-        createGroupIfAbsent(streamKey);
-        Disposable disposable = receiver.receive(
+    @PostConstruct
+    public void start() {
+        createGroupIfAbsent(RedisStreamsConfig.STREAM_KEY);
+        subscription = receiver.receive(
                         Consumer.from(RedisStreamsConfig.NOTIFICATION_GROUP, consumerName),
-                        StreamOffset.create(streamKey, ReadOffset.lastConsumed()))
-                .flatMap(message -> handleMessage(definition, message))
+                        StreamOffset.create(RedisStreamsConfig.STREAM_KEY, ReadOffset.lastConsumed()))
+                .flatMap(this::handleMessage)
                 .subscribe(
                         v -> {},
-                        e -> log.error("Stream 구독 오류 streamKey={}", streamKey, e)
+                        e -> log.error("Stream 구독 오류 streamKey={}", RedisStreamsConfig.STREAM_KEY, e)
                 );
-        if (subscriptions.putIfAbsent(streamKey, disposable) != null) {
-            disposable.dispose();
-            log.debug("중복 구독 방지 처리 streamKey={}", streamKey);
+        log.info("Redis Stream 구독 시작 streamKey={}", RedisStreamsConfig.STREAM_KEY);
+    }
+
+    @PreDestroy
+    public void stop() {
+        if (subscription != null && !subscription.isDisposed()) {
+            subscription.dispose();
         }
     }
 
-    public boolean isSubscribed(String streamKey) {
-        return subscriptions.containsKey(streamKey);
+    public boolean isSubscribed() {
+        return subscription != null && !subscription.isDisposed();
+    }
+
+    private Flux<Void> handleMessage(ObjectRecord<String, String> message) {
+        String rawPayload = message.getValue();
+        String streamMessageId = message.getId().getValue();
+
+        String eventTypeCode;
+        try {
+            eventTypeCode = payloadParser.extractEventTypeCode(rawPayload);
+        } catch (Exception e) {
+            log.error("envelope 파싱 실패 id={} payload={}", streamMessageId, rawPayload, e);
+            return Flux.empty();
+        }
+
+        EventTypeDefinition definition = registry.getByCode(eventTypeCode).orElse(null);
+        if (definition == null) {
+            log.warn("등록되지 않은 eventTypeCode={} id={}", eventTypeCode, streamMessageId);
+            return Flux.empty();
+        }
+
+        return statusService.saveEventWithStreamMessageId(definition, rawPayload, streamMessageId)
+                .flatMapMany(event -> {
+                    if (event.isScheduled()) {
+                        return acknowledge(message)
+                                .doOnSuccess(v -> log.info("예약 알림 저장 완료 ACK eventType={} id={}", eventTypeCode, streamMessageId))
+                                .flux();
+                    }
+                    return fanoutService.fanoutBuffered(event, definition, rawPayload,
+                                    RedisStreamsConfig.STREAM_KEY, message.getId())
+                            .then(statusService.markEventStatus(event.getId(), false))
+                            .doOnSuccess(v -> log.info("버퍼 enqueue 완료 eventType={} id={}", eventTypeCode, streamMessageId))
+                            .flux();
+                })
+                .onErrorResume(e -> {
+                    log.error("Stream 처리 실패 eventType={} id={}", eventTypeCode, streamMessageId, e);
+                    return Flux.empty();
+                });
+    }
+
+    private Mono<Void> acknowledge(ObjectRecord<String, String> message) {
+        return redisTemplate.opsForStream()
+                .acknowledge(RedisStreamsConfig.STREAM_KEY, RedisStreamsConfig.NOTIFICATION_GROUP, message.getId())
+                .then();
     }
 
     private void createGroupIfAbsent(String streamKey) {
@@ -72,33 +117,6 @@ public class StreamSubscriptionManager {
                 log.error("Consumer group 생성 실패 stream={}", streamKey, e);
             }
         }
-    }
-
-    private Flux<Void> handleMessage(EventTypeDefinition definition,
-                                      ObjectRecord<String, String> message) {
-        String streamKey = definition.getStreamKey();
-        return statusService.saveEventWithStreamMessageId(definition, message.getValue(), message.getId().getValue())
-                .flatMapMany(event -> {
-                    if (event.isScheduled()) {
-                        return acknowledge(streamKey, message)
-                                .doOnSuccess(v -> log.info("예약 알림 저장 완료 ACK streamKey={} id={}", streamKey, message.getId()))
-                                .flux();
-                    }
-                    return fanoutService.fanoutBuffered(event, definition, message.getValue(), streamKey, message.getId())
-                            .then(statusService.markEventStatus(event.getId(), false))
-                            .doOnSuccess(v -> log.info("버퍼 enqueue 완료 streamKey={} id={}", streamKey, message.getId()))
-                            .flux();
-                })
-                .onErrorResume(e -> {
-                    log.error("Stream 처리 실패 streamKey={} id={}", streamKey, message.getId(), e);
-                    return Flux.empty();
-                });
-    }
-
-    private Mono<Void> acknowledge(String streamKey, ObjectRecord<String, String> message) {
-        return redisTemplate.opsForStream()
-                .acknowledge(streamKey, RedisStreamsConfig.NOTIFICATION_GROUP, message.getId())
-                .then();
     }
 
     private boolean isBusyGroup(Exception e) {
