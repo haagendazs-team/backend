@@ -111,8 +111,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# sustain-direct, sse-v2-poc: DB seed / 토큰 불필요 — X-Member-Id 헤더로 직접 접속
-if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]]; then
+# sustain-direct, sse-v2-poc, send: DB seed / 토큰 불필요
+# send — /module/notifications/publish 는 내부 API (인증 없음), memberId는 계산으로 생성
+if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]] && [[ "$TARGET" != "send" ]]; then
 
 # ── seed ──────────────────────────────────────────────────────
 echo "▶ [seed] seed.sql 실행 중... (VUS=$VUS, SEED_OFFSET=$SEED_OFFSET)"
