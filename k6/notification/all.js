@@ -4,7 +4,7 @@
 // 시나리오 구성:
 //   connect_ramp   — SSE 연결 수락 속도/성공률 (0~6m, ramping-arrival-rate)
 //   sustain_ccu    — 3K CCU 동시 유지 (2~12m, ramping-vus)
-//   publish_single — PAYMENT_COMPLETED 단건 발행 TPS (2~6m, ramping-arrival-rate)
+//   publish_single — payment 단건 발행 TPS (2~6m, ramping-arrival-rate)
 //   receive_verify — SSE 이벤트 수신 완전성 검증 (3~9m, constant-vus)
 //
 // 실행:

@@ -3,7 +3,7 @@
 //
 // 측정 범위:
 //   - /module/notifications/publish 엔드포인트 처리량 (Redis XADD 경로)
-//   - PAYMENT_COMPLETED 단건 TPS 내성
+//   - payment 단건 TPS 내성
 //
 // 트래픽 산정:
 //   - 평시 TPS:  ~50 TPS
