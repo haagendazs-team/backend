@@ -2,16 +2,17 @@ package com.haagendazs.payment.Subscription.entity;
 
 import com.haagendazs.payment.Subscription.enums.PlanStatus;
 import com.haagendazs.payment.Subscription.enums.PlanType;
+import com.haagendazs.payment.global.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "subscription_plans")
+@Table(name = "subscription_plan")
 @Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class SubscriptionPlan {
+public class SubscriptionPlan extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

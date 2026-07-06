@@ -1,5 +1,6 @@
 package com.haagendazs.payment.product.entity;
 
+import com.haagendazs.payment.global.BaseEntity;
 import com.haagendazs.payment.product.enums.ProductStatus;
 import com.haagendazs.payment.product.enums.ProductType;
 import jakarta.persistence.*;
@@ -12,7 +13,7 @@ import lombok.*;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Products {
+public class Products extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
