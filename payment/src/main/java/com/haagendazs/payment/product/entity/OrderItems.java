@@ -1,6 +1,7 @@
 package com.haagendazs.payment.product.entity;
 
 import com.haagendazs.payment.global.BaseEntity;
+import com.haagendazs.payment.order.entity.Orders;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -17,9 +18,10 @@ public class OrderItems extends BaseEntity {
     @GeneratedValue
     private Long id;
 
-    //주문id
-    @Column(nullable = false)
-    private Long orderId;
+    //주문
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Orders order;
 
     //상품id
     @Column(nullable = false)
@@ -44,4 +46,8 @@ public class OrderItems extends BaseEntity {
     //총가격
     @Column(nullable = false)
     private Long totalPrice;
+
+    public void assignOrder(Orders order) {
+        this.order = order;
+    }
 }

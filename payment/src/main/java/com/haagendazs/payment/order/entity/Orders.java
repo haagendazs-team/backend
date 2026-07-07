@@ -31,14 +31,15 @@ public class Orders extends BaseEntity {
     private Long memberId;
 
     //워크스페이스id
-    @Column(nullable = false)
+    @Column
     private Long workspaceId;
 
     //주문번호
-    @Column(nullable = false, unique = true)
-    private Long orderNo;
+    @Column(nullable = false, unique = true, length = 38)
+    private String orderNo;
 
     //주문상품목록
+    @Builder.Default
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItems> orderItems = new ArrayList<>();
 
@@ -62,4 +63,9 @@ public class Orders extends BaseEntity {
     //주문시간 + 30분
     @Column(nullable = false)
     private LocalDateTime expiredAt;
+
+    public void addOrderItem(OrderItems orderItem) {
+        orderItems.add(orderItem);
+        orderItem.assignOrder(this);
+    }
 }
