@@ -1,0 +1,117 @@
+package com.haagendazs.member.application.service;
+
+import com.haagendazs.common.exception.BusinessException;
+import com.haagendazs.member.application.dto.WorkspaceMemberResult;
+import com.haagendazs.member.application.dto.WorkspaceResult;
+import com.haagendazs.member.domain.exception.MemberErrorCode;
+import com.haagendazs.member.domain.model.Member;
+import com.haagendazs.member.domain.model.Workspace;
+import com.haagendazs.member.domain.model.WorkspaceMember;
+import com.haagendazs.member.domain.model.WorkspaceRole;
+import com.haagendazs.member.domain.repository.MemberRepository;
+import com.haagendazs.member.domain.repository.WorkspaceMemberRepository;
+import com.haagendazs.member.domain.repository.WorkspaceRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class WorkspaceService {
+
+    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final MemberRepository memberRepository;
+
+    @Transactional
+    public WorkspaceResult createWorkspace(Long memberId, String name, String iconUrl) {
+        Workspace workspace = workspaceRepository.save(Workspace.create(name, iconUrl, "FREE"));
+        workspaceMemberRepository.save(WorkspaceMember.assign(workspace.getWorkspaceId(), memberId, WorkspaceRole.OWNER));
+        return WorkspaceResult.from(workspace);
+    }
+
+    public List<WorkspaceResult> getMyWorkspaces(Long memberId) {
+        return workspaceMemberRepository.findAllByMemberId(memberId).stream()
+                .map(WorkspaceMember::getWorkspaceId)
+                .map(workspaceId -> workspaceRepository.findById(workspaceId)
+                        .orElseThrow(() -> new BusinessException(MemberErrorCode.WORKSPACE_NOT_FOUND)))
+                .map(WorkspaceResult::from)
+                .toList();
+    }
+
+    public WorkspaceResult getWorkspace(Long memberId, Long workspaceId) {
+        validateWorkspaceMember(memberId, workspaceId);
+        Workspace workspace = getWorkspaceOrThrow(workspaceId);
+        return WorkspaceResult.from(workspace);
+    }
+
+    @Transactional
+    public WorkspaceResult updateWorkspace(Long memberId, Long workspaceId, String name, String iconUrl) {
+        WorkspaceMember workspaceMember = validateWorkspaceMember(memberId, workspaceId);
+        validateManagePermission(workspaceMember);
+
+        Workspace workspace = getWorkspaceOrThrow(workspaceId);
+        workspace.updateInfo(name, iconUrl);
+        return WorkspaceResult.from(workspaceRepository.save(workspace));
+    }
+
+    @Transactional
+    public void deleteWorkspace(Long memberId, Long workspaceId) {
+        WorkspaceMember workspaceMember = validateWorkspaceMember(memberId, workspaceId);
+        if (workspaceMember.getWorkspaceRole() != WorkspaceRole.OWNER) {
+            throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
+        }
+
+        workspaceRepository.delete(getWorkspaceOrThrow(workspaceId));
+    }
+
+    @Transactional
+    public WorkspaceMemberResult inviteMember(Long requesterId, Long workspaceId, String email, String role) {
+        WorkspaceMember requester = validateWorkspaceMember(requesterId, workspaceId);
+        validateManagePermission(requester);
+
+        Member targetMember = memberRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND));
+
+        if (requesterId.equals(targetMember.getMemberId())) {
+            throw new BusinessException(MemberErrorCode.CANNOT_INVITE_SELF);
+        }
+
+        if (workspaceMemberRepository.findByWorkspaceIdAndMemberId(workspaceId, targetMember.getMemberId()).isPresent()) {
+            throw new BusinessException(MemberErrorCode.ALREADY_WORKSPACE_MEMBER);
+        }
+
+        WorkspaceRole workspaceRole = role != null ? WorkspaceRole.valueOf(role) : WorkspaceRole.MEMBER;
+        WorkspaceMember invited = workspaceMemberRepository.save(
+                WorkspaceMember.assign(workspaceId, targetMember.getMemberId(), workspaceRole)
+        );
+        return WorkspaceMemberResult.from(invited);
+    }
+
+    public List<WorkspaceMemberResult> getWorkspaceMembers(Long memberId, Long workspaceId) {
+        validateWorkspaceMember(memberId, workspaceId);
+        return workspaceMemberRepository.findAllByWorkspaceId(workspaceId).stream()
+                .map(WorkspaceMemberResult::from)
+                .toList();
+    }
+
+    WorkspaceMember validateWorkspaceMember(Long memberId, Long workspaceId) {
+        getWorkspaceOrThrow(workspaceId);
+        return workspaceMemberRepository.findByWorkspaceIdAndMemberId(workspaceId, memberId)
+                .orElseThrow(() -> new BusinessException(MemberErrorCode.NOT_WORKSPACE_MEMBER));
+    }
+
+    private Workspace getWorkspaceOrThrow(Long workspaceId) {
+        return workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new BusinessException(MemberErrorCode.WORKSPACE_NOT_FOUND));
+    }
+
+    private void validateManagePermission(WorkspaceMember workspaceMember) {
+        if (!workspaceMember.getWorkspaceRole().canManageWorkspace()) {
+            throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
+        }
+    }
+}

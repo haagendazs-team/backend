@@ -40,3 +40,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:1800000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:3600000}
