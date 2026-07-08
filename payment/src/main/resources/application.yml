@@ -43,3 +43,6 @@ payment:
   customer-key:
     hash-secret: ${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
     encrypt-secret: ${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}
+
+toss:
+  secret-key: ${TOSS_SECRET_KEY}

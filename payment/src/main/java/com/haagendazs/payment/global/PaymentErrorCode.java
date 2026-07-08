@@ -22,7 +22,8 @@ public enum PaymentErrorCode implements ErrorCode {
             HttpStatus.INTERNAL_SERVER_ERROR,
     "P006",
             "결제 사용자 식별키 생성에 실패했습니다."
-    );
+    ),
+    INVALID_CUSTOMER_KEY(HttpStatus.NOT_FOUND, "P007", "사용자 식별 키를 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

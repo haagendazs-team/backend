@@ -17,6 +17,8 @@ public class OrderController {
 
     @PostMapping("/{workspaceId}/subscription")
     public ApiResponse<OrderCreateResponse> createSubscriptionOrder(
+            @RequestHeader("X-Member-Id")
+            Long memberId,
             @PathVariable
             Long workspaceId,
             @RequestBody @Valid

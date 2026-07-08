@@ -1,10 +1,9 @@
 package com.haagendazs.payment.payment.service.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 public record BillingKeyIssueRequest(
-        @NotNull
+        @NotBlank
         String orderNo,
         @NotBlank
         String authKey,
