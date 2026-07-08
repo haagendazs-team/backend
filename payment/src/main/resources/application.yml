@@ -38,3 +38,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+
+payment:
+  customer-key:
+    hash-secret: ${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
+    encrypt-secret: ${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}

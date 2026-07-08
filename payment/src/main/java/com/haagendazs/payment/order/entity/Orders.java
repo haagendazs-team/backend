@@ -35,7 +35,7 @@ public class Orders extends BaseEntity {
     private Long workspaceId;
 
     //주문번호
-    @Column(nullable = false, unique = true, length = 38)
+    @Column(nullable = false, unique = true)
     private String orderNo;
 
     //주문상품목록

@@ -1,4 +1,4 @@
-package com.haagendazs.payment.Gift.enums;
+package com.haagendazs.payment.gift.enums;
 
 public enum GiftStatus {
     READY,     // 선물 생성됨, 아직 발송 전

@@ -1,6 +1,6 @@
-package com.haagendazs.payment.Gift.entity;
+package com.haagendazs.payment.gift.entity;
 
-import com.haagendazs.payment.Gift.enums.GiftStatus;
+import com.haagendazs.payment.gift.enums.GiftStatus;
 import com.haagendazs.payment.global.BaseEntity;
 import jakarta.persistence.*;
 

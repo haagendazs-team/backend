@@ -7,8 +7,11 @@ import com.haagendazs.payment.order.enums.OrderStatus;
 import com.haagendazs.payment.order.enums.OrderType;
 import com.haagendazs.payment.order.repository.OrderRepository;
 import com.haagendazs.payment.order.service.dto.OrderCreateRequest;
+import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
+import com.haagendazs.payment.payment.service.PaymentCustomerKeyService;
 import com.haagendazs.payment.product.entity.OrderItems;
 import com.haagendazs.payment.product.entity.Products;
+import com.haagendazs.payment.product.enums.ProductStatus;
 import com.haagendazs.payment.product.enums.ProductType;
 import com.haagendazs.payment.product.repository.ProductsRepository;
 import java.time.LocalDateTime;
@@ -26,16 +29,34 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ProductsRepository productsRepository;
+    private final PaymentCustomerKeyService paymentCustomerKeyService;
 
     //주문생성
     @Transactional
-    public void createOrder(Long memberId, Long workspaceId, OrderCreateRequest dto){
-        Products product = productsRepository.findById(dto.prodctId())
+    public OrderCreateResponse createOrder(Long memberId, Long workspaceId, OrderCreateRequest dto){
+        Products product = productsRepository.findById(dto.productId())
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PRODUCT_NOT_FOUND));
+        if (product.getStatus() == ProductStatus.SUSPENDED) {
+            throw new BusinessException(PaymentErrorCode.PRODUCT_SUSPENDED);
+        }
 
         long quantity = 1L; //수량 지금은 1 고정
         long totalAmount = product.getPrice() * quantity;
         LocalDateTime orderedAt = LocalDateTime.now();
+
+        OrderType orderType;
+
+        if(product.getProductType() == ProductType.SUBSCRIPTION){
+            orderType = OrderType.Billing;
+        } else{
+            orderType = OrderType.Normal;
+        }
+
+        String customerKey = null;
+
+        if (orderType == OrderType.Billing) {
+            customerKey = paymentCustomerKeyService.getOrCreateCustomerKey(memberId);
+        }
 
         Orders order = Orders.builder()
                 .memberId(memberId)
@@ -43,7 +64,7 @@ public class OrderService {
                 .orderNo(generateOrderNumber())
                 .totalAmount(totalAmount)
                 .orderStatus(OrderStatus.PENDING)
-                .orderType(resolveOrderType(product))
+                .orderType(orderType)
                 .orderedAt(orderedAt)
                 .expiredAt(orderedAt.plusMinutes(30))
                 .build();
@@ -57,7 +78,16 @@ public class OrderService {
                 .totalPrice(totalAmount)
                 .build());
 
-        orderRepository.save(order);
+        Orders savedOrder = orderRepository.save(order);
+
+        return new OrderCreateResponse(
+                savedOrder.getId(),
+                savedOrder.getOrderNo(),
+                product.getName(),
+                savedOrder.getTotalAmount(),
+                savedOrder.getOrderType(),
+                customerKey
+        );
     }
 
     // 주문번호 생성
@@ -65,7 +95,7 @@ public class OrderService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyMMdd");
 
     public static String generateOrderNumber() {
-        String datePart = LocalDate.now().format(DATE_FORMATTER);
+        String datePart = LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).format(DATE_FORMATTER);
         String uniquePart = UUID.randomUUID().toString().replace("-", "");
         return datePart + uniquePart;
     }
