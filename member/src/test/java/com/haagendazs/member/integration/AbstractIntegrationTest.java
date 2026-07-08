@@ -18,6 +18,7 @@ import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -99,6 +100,18 @@ public abstract class AbstractIntegrationTest {
                 objectMapper.readTree(loginResult.getResponse().getContentAsString()).get("data").toString(),
                 AuthTokens.class
         );
+    }
+
+    protected Long getMemberId(String accessToken) throws Exception {
+        MvcResult result = mockMvc.perform(get("/members/me")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data")
+                .get("memberId")
+                .asLong();
     }
 
     protected record AuthTokens(String accessToken, String refreshToken) {

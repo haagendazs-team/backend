@@ -99,17 +99,4 @@ class MemberApiIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("M004"));
     }
-
-    private Long getMemberId(String accessToken) throws Exception {
-        return objectMapper.readTree(
-                        mockMvc.perform(get("/members/me")
-                                        .header("Authorization", "Bearer " + accessToken))
-                                .andExpect(status().isOk())
-                                .andReturn()
-                                .getResponse()
-                                .getContentAsString()
-                ).get("data")
-                .get("memberId")
-                .asLong();
-    }
 }
