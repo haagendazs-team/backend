@@ -52,8 +52,8 @@ class ChannelServiceJunitTest {
     @Test
     @DisplayName("[Happy] 채널 생성 시 생성자를 채널 멤버로 등록한다")
     void createChannel_success_addsCreatorAsMember() {
-        WorkspaceMember workspaceMember = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
-        when(workspaceService.validateWorkspaceMember(1L, 1L)).thenReturn(workspaceMember);
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
         when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> {
             Channel channel = invocation.getArgument(0);
             return TestFixture.channel(10L, channel.getWorkspaceId(), channel.getName(), false);
@@ -83,10 +83,10 @@ class ChannelServiceJunitTest {
     @Test
     @DisplayName("[Happy] 워크스페이스 내 내 채널 목록 조회에 성공한다")
     void getMyChannelsInWorkspace_success_returnsJoinedChannels() {
-        WorkspaceMember workspaceMember = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
         Channel channel = TestFixture.channel(10L, 1L, CHANNEL_NAME, false);
 
-        when(workspaceService.validateWorkspaceMember(1L, 1L)).thenReturn(workspaceMember);
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
         when(channelMemberRepository.findAllByMemberId(1L))
                 .thenReturn(List.of(ChannelMember.add(10L, 1L)));
         when(channelRepository.findAllByWorkspaceIdAndChannelIdIn(eq(1L), anyList()))
@@ -101,11 +101,10 @@ class ChannelServiceJunitTest {
     @Test
     @DisplayName("[Happy] DM 채널이 없으면 새 DM 채널을 생성한다")
     void getOrCreateDmChannel_notExists_createsDmChannel() {
-        WorkspaceMember requester = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
-        WorkspaceMember target = TestFixture.workspaceMember(1L, 2L, WorkspaceRole.MEMBER);
-
-        when(workspaceService.validateWorkspaceMember(1L, 1L)).thenReturn(requester);
-        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.of(target));
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L))
+                .thenReturn(Optional.of(TestFixture.workspaceMember(1L, 2L, WorkspaceRole.MEMBER)));
         when(channelRepository.findDmChannelByWorkspaceIdAndMemberIds(1L, 1L, 2L)).thenReturn(Optional.empty());
         when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> {
             Channel channel = invocation.getArgument(0);
@@ -123,12 +122,12 @@ class ChannelServiceJunitTest {
     @Test
     @DisplayName("[Happy] 기존 DM 채널이 있으면 새로 생성하지 않고 기존 채널을 반환한다")
     void getOrCreateDmChannel_exists_returnsExistingChannel() {
-        WorkspaceMember requester = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
-        WorkspaceMember target = TestFixture.workspaceMember(1L, 2L, WorkspaceRole.MEMBER);
         Channel existingDm = TestFixture.channel(20L, 1L, "dm-1-2", true);
 
-        when(workspaceService.validateWorkspaceMember(1L, 1L)).thenReturn(requester);
-        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.of(target));
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L))
+                .thenReturn(Optional.of(TestFixture.workspaceMember(1L, 2L, WorkspaceRole.MEMBER)));
         when(channelRepository.findDmChannelByWorkspaceIdAndMemberIds(1L, 1L, 2L))
                 .thenReturn(Optional.of(existingDm));
 
