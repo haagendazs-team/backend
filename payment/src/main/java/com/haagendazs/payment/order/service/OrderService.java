@@ -90,6 +90,58 @@ public class OrderService {
         );
     }
 
+    @Transactional
+    public OrderCreateResponse createSubscriptionOrderWithAmount(
+            Long memberId,
+            Long workspaceId,
+            Long productId,
+            Long amount
+    ) {
+        Products product = productsRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PRODUCT_NOT_FOUND));
+
+        if (product.getStatus() == ProductStatus.SUSPENDED) {
+            throw new BusinessException(PaymentErrorCode.PRODUCT_SUSPENDED);
+        }
+        if (product.getProductType() != ProductType.SUBSCRIPTION) {
+            throw new BusinessException(PaymentErrorCode.UNSUPPORTED_PRODUCT_TYPE);
+        }
+
+        LocalDateTime orderedAt = LocalDateTime.now();
+        String customerKey = paymentCustomerKeyService.getOrCreateCustomerKey(memberId);
+
+        Orders order = Orders.builder()
+                .memberId(memberId)
+                .workspaceId(workspaceId)
+                .orderNo(generateOrderNumber())
+                .totalAmount(amount)
+                .orderStatus(OrderStatus.PENDING)
+                .orderType(OrderType.Billing)
+                .orderedAt(orderedAt)
+                .expiredAt(orderedAt.plusMinutes(30))
+                .build();
+
+        order.addOrderItem(OrderItems.builder()
+                .productId(product.getId())
+                .itemName(product.getName())
+                .itemType(product.getProductType().name())
+                .unitPrice(amount)
+                .quantity(1L)
+                .totalPrice(amount)
+                .build());
+
+        Orders savedOrder = orderRepository.save(order);
+
+        return new OrderCreateResponse(
+                savedOrder.getId(),
+                savedOrder.getOrderNo(),
+                product.getName(),
+                savedOrder.getTotalAmount(),
+                savedOrder.getOrderType(),
+                customerKey
+        );
+    }
+
     // 주문번호 생성
     // 날짜(YYMMDD) + UUID 32자리 조합으로 DB 조회 없이 충돌 가능성을 사실상 제거합니다.
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyMMdd");

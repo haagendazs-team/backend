@@ -53,4 +53,8 @@ public class SubscriptionScheduledChanges {
     // 예약 취소 시각
     @Column(nullable = true)
     private LocalDateTime canceledAt;
+
+    public void apply() {
+        this.changeStatus = SubscriptionChangeStatus.APPLIED;
+    }
 }

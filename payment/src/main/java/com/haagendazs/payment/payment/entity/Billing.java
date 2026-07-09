@@ -28,7 +28,7 @@ public class Billing extends BaseEntity {
     private Long memberId;
 
     //자동결제키
-    @Column(nullable = false)
+    @Column
     private String billingKey;
 
     //카드사코드
@@ -54,4 +54,21 @@ public class Billing extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private BillingStatus billingStatus;
 
+    public void markDefault() {
+        this.isDefault = true;
+    }
+
+    public void unsetDefault() {
+        this.isDefault = false;
+    }
+
+    public void deactivate() {
+        this.billingStatus = BillingStatus.INACTIVE;
+        this.isDefault = false;
+        this.billingKey = null;
+        this.issuerCode = null;
+        this.cardNumber = null;
+        this.cardType = null;
+        this.ownerType = null;
+    }
 }

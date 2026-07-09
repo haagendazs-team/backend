@@ -50,4 +50,11 @@ public class TossBillingClient {
                 .retrieve()
                 .body(TossBillingPaymentResponse.class);
     }
+
+    public void deleteBillingKey(String billingKey) {
+        restClient.delete()
+                .uri("/v1/billing/{billingKey}", billingKey)
+                .retrieve()
+                .toBodilessEntity();
+    }
 }

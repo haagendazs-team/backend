@@ -8,27 +8,27 @@ import com.haagendazs.payment.order.enums.OrderType;
 import com.haagendazs.payment.order.repository.OrderRepository;
 import com.haagendazs.payment.payment.entity.Billing;
 import com.haagendazs.payment.payment.entity.Payments;
-import com.haagendazs.payment.payment.enums.*;
+import com.haagendazs.payment.payment.enums.BillingStatus;
+import com.haagendazs.payment.payment.enums.CardCompany;
+import com.haagendazs.payment.payment.enums.PaymentMethod;
+import com.haagendazs.payment.payment.enums.PaymentProvider;
+import com.haagendazs.payment.payment.enums.PaymentStatus;
 import com.haagendazs.payment.payment.repository.BillingRepository;
 import com.haagendazs.payment.payment.repository.PaymentRepository;
-import com.haagendazs.payment.payment.service.dto.BillingKeyIssueRequest;
-import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueResponse;
+import com.haagendazs.payment.payment.service.dto.BillingPaymentRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
 import com.haagendazs.payment.payment.service.tools.TossBillingClient;
-
 import com.haagendazs.payment.subscription.service.SubscriptionService;
-
-import java.time.LocalDateTime;
-
-import java.time.OffsetDateTime;
-
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+
 @Service
 @RequiredArgsConstructor
-public class PaymentService {
+public class BillingPaymentService {
 
     private final PaymentCustomerKeyService paymentCustomerKeyService;
     private final BillingRepository billingRepository;
@@ -38,24 +38,13 @@ public class PaymentService {
     private final SubscriptionService subscriptionService;
 
     @Transactional
-    public void issueBillingAndPay(Long memberId, BillingKeyIssueRequest request) {
-
-        //결제 가져오기
+    public void payWithRegisteredBillingMethod(Long memberId, BillingPaymentRequest request) {
         Orders order = getValidBillingOrder(memberId, request.orderNo());
-
-        //소비자 키 검증
-        String customerKey = validateCustomerKey(memberId, request.customerKey());
-
-        TossBillingKeyIssueResponse tossResponse =
-                tossBillingClient.issueBillingKey(
-                        request.authKey(),
-                        customerKey
-                );
-
-        Billing billing = saveBilling(memberId, tossResponse);
+        Billing billing = getDefaultBilling(memberId);
+        String customerKey = paymentCustomerKeyService.getCustomerKey(memberId);
 
         TossBillingPaymentResponse paymentResponse =
-                executeInitialBillingPayment(order, billing, customerKey);
+                executeBillingPayment(order, billing, customerKey);
 
         Payments payment = savePayment(order, paymentResponse);
 
@@ -64,13 +53,7 @@ public class PaymentService {
         }
 
         order.complete();
-
-        //구독플랜적용
-        subscriptionService.activateSubscriptionByPayment(
-                order,
-                billing,
-                payment
-        );
+        subscriptionService.activateSubscriptionByPayment(order, billing, payment);
     }
 
     private Orders getValidBillingOrder(Long memberId, String orderNo) {
@@ -80,15 +63,12 @@ public class PaymentService {
         if (!order.getMemberId().equals(memberId)) {
             throw new BusinessException(PaymentErrorCode.ORDER_ACCESS_DENIED);
         }
-
         if (order.getOrderStatus() != OrderStatus.PENDING) {
             throw new BusinessException(PaymentErrorCode.INVALID_ORDER_STATUS);
         }
-
         if (order.getOrderType() != OrderType.Billing) {
             throw new BusinessException(PaymentErrorCode.INVALID_ORDER_TYPE);
         }
-
         if (order.getExpiredAt().isBefore(LocalDateTime.now())) {
             throw new BusinessException(PaymentErrorCode.ORDER_EXPIRED);
         }
@@ -96,60 +76,37 @@ public class PaymentService {
         return order;
     }
 
-    private String validateCustomerKey(Long memberId, String requestCustomerKey) {
-        String savedCustomerKey = paymentCustomerKeyService.getCustomerKey(memberId);
-
-        if (!savedCustomerKey.equals(requestCustomerKey)) {
-            throw new BusinessException(PaymentErrorCode.INVALID_CUSTOMER_KEY);
-        }
-
-        return savedCustomerKey;
+    private Billing getDefaultBilling(Long memberId) {
+        return billingRepository.findFirstByMemberIdAndBillingStatusAndIsDefaultTrueOrderByIdDesc(
+                        memberId,
+                        BillingStatus.ACTIVE
+                )
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.BILLING_METHOD_NOT_FOUND));
     }
 
-    private Billing saveBilling(
-            Long memberId,
-            TossBillingKeyIssueResponse tossResponse
-    ) {
-
-        Billing billing = Billing.builder()
-                .memberId(memberId)
-                .billingKey(tossResponse.billingKey())
-                .issuerCode(CardCompany.fromCode(tossResponse.card().issuerCode()))
-                .cardNumber(tossResponse.card().number())
-                .cardType(CardType.from(tossResponse.card().cardType()))
-                .ownerType(OwnerType.from(tossResponse.card().ownerType()))
-                .isDefault(true)
-                .billingStatus(BillingStatus.ACTIVE)
-                .build();
-
-        return billingRepository.save(billing);
-    }
-
-    private TossBillingPaymentResponse executeInitialBillingPayment(
+    private TossBillingPaymentResponse executeBillingPayment(
             Orders order,
             Billing billing,
             String customerKey
-            ) {
+    ) {
         TossBillingPaymentResponse paymentResponse =
-        tossBillingClient.payWithBillingKey(
-                billing.getBillingKey(),
-                customerKey,
-                order.getOrderNo(),
-                order.getTotalAmount(),
-                order.getOrderItems().get(0).getItemName()
-        );
+                tossBillingClient.payWithBillingKey(
+                        billing.getBillingKey(),
+                        customerKey,
+                        order.getOrderNo(),
+                        order.getTotalAmount(),
+                        order.getOrderItems().get(0).getItemName()
+                );
 
-        if (!"DONE".equals(paymentResponse.status())) {
+        if (!PaymentStatus.DONE.name().equals(paymentResponse.status())
+                || !order.getTotalAmount().equals(paymentResponse.totalAmount())) {
             throw new BusinessException(PaymentErrorCode.BILLING_PAYMENT_FAILED);
         }
 
         return paymentResponse;
     }
 
-    private Payments savePayment(
-            Orders order,
-            TossBillingPaymentResponse response
-    ) {
+    private Payments savePayment(Orders order, TossBillingPaymentResponse response) {
         Payments payment = Payments.builder()
                 .orderId(order.getId())
                 .paymentKey(response.paymentKey())
@@ -166,10 +123,9 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
-    private LocalDateTime parseDateTime(String time){
+    private LocalDateTime parseDateTime(String time) {
         OffsetDateTime odt = OffsetDateTime.parse(time);
 
-        LocalDateTime ldt = odt.toLocalDateTime();
-        return ldt;
+        return odt.toLocalDateTime();
     }
 }

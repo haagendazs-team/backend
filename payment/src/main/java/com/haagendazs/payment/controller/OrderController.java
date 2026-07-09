@@ -10,13 +10,13 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/order")
+@RequestMapping("/api/v1/payments/workspaces/{workspaceId}/orders")
 public class OrderController {
 
     private final OrderService orderService;
 
     //구독 주문
-    @PostMapping("/{workspaceId}/subscription")
+    @PostMapping("/subscription")
     public ApiResponse<OrderCreateResponse> createSubscriptionOrder(
             @RequestHeader("X-Member-Id")
             Long memberId,

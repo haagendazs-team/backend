@@ -40,8 +40,17 @@ public enum PaymentErrorCode implements ErrorCode {
             "Kafka 메시지 역직렬화에 실패했습니다."
     ),
     PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "P017", "플랜을 찾을 수 없습니다."),
-    ALREADY_PREMIUM_SUBSCRIPTION(HttpStatus.BAD_REQUEST, "P017",
-            "이미 유료 구독 플랜을 이용 중인 워크스페이스입니다.");
+    ALREADY_PREMIUM_SUBSCRIPTION(HttpStatus.BAD_REQUEST, "P018",
+            "이미 유료 구독 플랜을 이용 중인 워크스페이스입니다."),
+    BILLING_METHOD_NOT_FOUND(HttpStatus.NOT_FOUND, "P019",
+            "등록된 결제수단을 찾을 수 없습니다."),
+    BILLING_METHOD_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "P020",
+            "결제수단은 최대 5개까지 등록할 수 있습니다."),
+    SUBSCRIPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "P021", "구독을 찾을 수 없습니다."),
+    BILLING_KEY_DELETE_FAILED(HttpStatus.BAD_GATEWAY, "P022",
+            "토스페이먼츠 빌링키 삭제에 실패했습니다."),
+    INVALID_SUBSCRIPTION_CHANGE(HttpStatus.BAD_REQUEST, "P023",
+            "변경할 수 없는 구독 플랜입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

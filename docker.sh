@@ -3,6 +3,24 @@ set -euo pipefail
 
 COMPOSE_FILE="docker-compose.local.yml"
 SCALABLE_SERVICES="member payment search notification chat"
+APP_SERVICES="config-server discovery gateway member payment search notification chat"
+
+build_jars() {
+    local services=("$@")
+
+    if [[ "${#services[@]}" -eq 0 ]]; then
+        return 0
+    fi
+
+    local tasks=()
+    local service
+    for service in "${services[@]}"; do
+        tasks+=(":${service}:bootJar")
+    done
+
+    echo "[build] 애플리케이션 JAR 빌드: ${services[*]}"
+    ./gradlew --no-daemon "${tasks[@]}"
+}
 
 usage() {
     cat <<EOF
@@ -30,6 +48,7 @@ is_scalable() {
 }
 
 cmd_up() {
+    build_jars $APP_SERVICES
     echo "[up] 전체 스택 기동..."
     docker compose -f "$COMPOSE_FILE" up -d
 }
@@ -46,6 +65,7 @@ cmd_restart() {
         exit 1
     fi
 
+    build_jars "$service"
     echo "[restart] $service 재빌드 및 재기동..."
     docker compose -f "$COMPOSE_FILE" up -d --build --no-deps "$service"
 }
@@ -113,7 +133,10 @@ cmd_service() {
             exit 1 ;;
     esac
 
+    local build_targets=(config-server discovery "$service")
+
     echo "[service] $service 및 의존 인프라 기동: $deps"
+    build_jars "${build_targets[@]}"
     docker compose -f "$COMPOSE_FILE" up -d --no-recreate $deps
     docker compose -f "$COMPOSE_FILE" up -d --no-recreate "$service"
 }
