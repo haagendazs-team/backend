@@ -1,6 +1,5 @@
 package com.haagendazs.presentation.stomp;
 
-mport lombok.RequiredArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;

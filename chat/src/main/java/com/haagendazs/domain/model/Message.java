@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 public class Message {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long messageId;
 
     @Column(nullable = false)
     private Long channelId;
