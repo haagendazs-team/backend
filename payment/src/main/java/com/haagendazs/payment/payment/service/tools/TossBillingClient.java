@@ -2,6 +2,8 @@ package com.haagendazs.payment.payment.service.tools;
 
 import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueResponse;
+import com.haagendazs.payment.payment.service.dto.TossBillingPaymentRequest;
+import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -26,5 +28,26 @@ public class TossBillingClient {
                 .body(request)
                 .retrieve()
                 .body(TossBillingKeyIssueResponse.class);
+    }
+
+    public TossBillingPaymentResponse payWithBillingKey(
+            String billingKey,
+            String customerKey,
+            String orderId, //주문번호
+            Long amount,
+            String orderName
+    ) {
+        TossBillingPaymentRequest request = new TossBillingPaymentRequest(
+                customerKey,
+                orderId,
+                amount,
+                orderName
+        );
+
+        return restClient.post()
+                .uri("/v1/billing/{billingKey}", billingKey)
+                .body(request)
+                .retrieve()
+                .body(TossBillingPaymentResponse.class);
     }
 }

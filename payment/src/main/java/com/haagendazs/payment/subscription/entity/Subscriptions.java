@@ -1,6 +1,6 @@
-package com.haagendazs.payment.Subscription.entity;
+package com.haagendazs.payment.subscription.entity;
 
-import com.haagendazs.payment.Subscription.enums.SubscriptionStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionStatus;
 import com.haagendazs.payment.global.BaseEntity;
 import jakarta.persistence.*;
 
@@ -33,10 +33,6 @@ public class Subscriptions extends BaseEntity {
     @Column(nullable = false, length = 30)
     private SubscriptionStatus status;
 
-    // 구독 최초 시작 시각
-    @Column(nullable = false)
-    private LocalDateTime startedAt;
-
     // 현재 구독 기간 시작
     @Column(nullable = false)
     private LocalDateTime currentPeriodStart;
@@ -45,8 +41,13 @@ public class Subscriptions extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime currentPeriodEnd;
 
-    // 구독 취소 시각
-    @Column(nullable = true)
-    private LocalDateTime canceledAt;
+    @Column
+    private Long billingId;
 
+    public void updatePlan(Long planId, LocalDateTime now, LocalDateTime localDateTime, Long billingId) {
+        this.subscriptionPlanId = planId;
+        this.currentPeriodStart = now;
+        this.currentPeriodEnd = localDateTime;
+        this.billingId = billingId;
+    }
 }

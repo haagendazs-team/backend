@@ -1,10 +1,9 @@
 package com.haagendazs.payment.product.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.payment.Subscription.entity.SubscriptionPlan;
-import com.haagendazs.payment.Subscription.enums.PlanStatus;
-import com.haagendazs.payment.Subscription.repository.SubscriptionPlanRepository;
-import com.haagendazs.payment.Subscription.service.dto.SubscriptionPlanResponse;
+import com.haagendazs.payment.subscription.entity.SubscriptionPlan;
+import com.haagendazs.payment.subscription.repository.SubscriptionPlanRepository;
+import com.haagendazs.payment.subscription.service.dto.SubscriptionPlanResponse;
 import com.haagendazs.payment.global.PaymentErrorCode;
 import com.haagendazs.payment.product.entity.Products;
 import com.haagendazs.payment.product.enums.ProductType;

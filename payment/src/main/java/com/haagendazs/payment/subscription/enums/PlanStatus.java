@@ -1,4 +1,4 @@
-package com.haagendazs.payment.Subscription.enums;
+package com.haagendazs.payment.subscription.enums;
 
 public enum PlanStatus {
     ACTIVE, //사용가능

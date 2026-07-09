@@ -1,4 +1,4 @@
-package com.haagendazs.payment.Subscription.enums;
+package com.haagendazs.payment.subscription.enums;
 
 public enum SubscriptionChangeStatus {
     SCHEDULED, // 예약됨

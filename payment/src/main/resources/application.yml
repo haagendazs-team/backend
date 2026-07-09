@@ -22,6 +22,23 @@ spring:
     locations: classpath:db/migration
     schemas: payment
     table: flyway_schema_history
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+    consumer:
+      group-id: payment
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+      topics:
+        workspace-created: member.workspace.created.v1
+        subscription-initialized: payment.subscription-initialized.v1
+        subscription-changed: payment.subscription-changed.v1
 
 management:
   endpoints:
@@ -41,8 +58,8 @@ eureka:
 
 payment:
   customer-key:
-    hash-secret: ${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
-    encrypt-secret: ${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}
+    hash-secret: local-customer-key-hash-secret #${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
+    encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= #${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}
 
 toss:
-  secret-key: ${TOSS_SECRET_KEY}
+  secret-key: TOSS_SECRET_KEY #${TOSS_SECRET_KEY}

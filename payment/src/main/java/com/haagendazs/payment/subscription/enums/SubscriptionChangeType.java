@@ -1,4 +1,4 @@
-package com.haagendazs.payment.Subscription.enums;
+package com.haagendazs.payment.subscription.enums;
 
 public enum SubscriptionChangeType {
     PLAN_CHANGE,   // 플랜 변경

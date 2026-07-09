@@ -1,6 +1,6 @@
-package com.haagendazs.payment.Subscription.entity;
+package com.haagendazs.payment.subscription.entity;
 
-import com.haagendazs.payment.Subscription.enums.SubscriptionStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionStatus;
 import com.haagendazs.payment.global.BaseEntity;
 import jakarta.persistence.*;
 

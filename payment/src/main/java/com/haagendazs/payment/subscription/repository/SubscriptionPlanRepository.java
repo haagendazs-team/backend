@@ -1,6 +1,6 @@
-package com.haagendazs.payment.Subscription.repository;
+package com.haagendazs.payment.subscription.repository;
 
-import com.haagendazs.payment.Subscription.entity.SubscriptionPlan;
+import com.haagendazs.payment.subscription.entity.SubscriptionPlan;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

@@ -32,4 +32,7 @@ dependencies {
 
     testCompileOnly("org.projectlombok:lombok:1.18.46")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.46")
+
+    //카프카
+    implementation 'org.springframework.kafka:spring-kafka'
 }

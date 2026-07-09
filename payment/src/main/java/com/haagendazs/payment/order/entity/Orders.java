@@ -1,6 +1,8 @@
 package com.haagendazs.payment.order.entity;
 
+import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.payment.global.BaseEntity;
+import com.haagendazs.payment.global.PaymentErrorCode;
 import com.haagendazs.payment.order.enums.OrderStatus;
 import com.haagendazs.payment.order.enums.OrderType;
 import com.haagendazs.payment.product.entity.OrderItems;
@@ -67,5 +69,19 @@ public class Orders extends BaseEntity {
     public void addOrderItem(OrderItems orderItem) {
         orderItems.add(orderItem);
         orderItem.assignOrder(this);
+    }
+
+    public void complete() {
+        this.orderStatus = OrderStatus.PAID;
+    }
+
+    //구독상품의 상품 id 추출
+    public Long getSubscriptionProductId() {
+        return this.orderItems.stream()
+                .filter(item -> "SUBSCRIPTION".equals(item.getItemType())) // 주문 당시 타입 체크
+                .map(OrderItems::getProductId)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PRODUCT_NOT_FOUND));
+        // 💡 구독 결제 메서드인데 구독 상품이 없으면 문제가 있는 것이므로 예외 처리
     }
 }

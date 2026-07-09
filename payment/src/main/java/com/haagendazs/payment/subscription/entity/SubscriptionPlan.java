@@ -1,7 +1,7 @@
-package com.haagendazs.payment.Subscription.entity;
+package com.haagendazs.payment.subscription.entity;
 
-import com.haagendazs.payment.Subscription.enums.PlanStatus;
-import com.haagendazs.payment.Subscription.enums.PlanType;
+import com.haagendazs.payment.subscription.enums.PlanStatus;
+import com.haagendazs.payment.subscription.enums.PlanType;
 import com.haagendazs.payment.global.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
@@ -31,6 +31,8 @@ public class SubscriptionPlan extends BaseEntity {
     private int durationDays = 30;
 
     //플랜이 제공하는 혜택
+    @Column(nullable = false)
+    private int searchableDays;
 
     //구독상품상태
     @Column(nullable = false)

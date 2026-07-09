@@ -1,7 +1,7 @@
-package com.haagendazs.payment.Subscription.entity;
+package com.haagendazs.payment.subscription.entity;
 
-import com.haagendazs.payment.Subscription.enums.SubscriptionChangeStatus;
-import com.haagendazs.payment.Subscription.enums.SubscriptionChangeType;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;

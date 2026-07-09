@@ -30,14 +30,17 @@ public class Payments extends BaseEntity {
     private String paymentKey;
 
     //결제수단
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentMethod paymentMethod;
 
     //PG사 또는 간편결제 제공자
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentProvider paymentProvider;
 
     //결제 상태
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentStatus paymentStatus;
 
@@ -51,9 +54,10 @@ public class Payments extends BaseEntity {
 
     //승인완료시각
     @Column(nullable = true)
-    private LocalDateTime approved_at;
+    private LocalDateTime approvedAt;
 
     //카드사
+    @Enumerated(EnumType.STRING)
     @Column(nullable = true)
     private CardCompany cardCompany;
 
@@ -62,11 +66,12 @@ public class Payments extends BaseEntity {
     private String cardNumber;
 
     //간편결제사
+    @Enumerated(EnumType.STRING)
     @Column(nullable = true)
     private EasyPayProvider easyPayProvider;
 
     //영수증 url
     @Column(nullable = true)
-    private String receipt_url;
+    private String receiptUrl;
 
 }

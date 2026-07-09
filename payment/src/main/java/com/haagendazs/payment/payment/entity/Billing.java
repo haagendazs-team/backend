@@ -47,7 +47,7 @@ public class Billing extends BaseEntity {
     private OwnerType ownerType;
 
     //기본결제수단여부
-    //private Boolean isDefault;
+    private Boolean isDefault;
 
     //결제수단상태
     @Column(nullable = false)

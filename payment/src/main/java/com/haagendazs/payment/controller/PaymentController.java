@@ -18,6 +18,7 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
+    //
     @PostMapping("/billing/issue")
     public ApiResponse<Void> requestBillingKeyIssue(
             @RequestHeader("X-Member-Id")
@@ -25,7 +26,7 @@ public class PaymentController {
             @RequestBody @Valid
             BillingKeyIssueRequest request
     ){
-        paymentService.billingKeyIssue(memberId, request);
+        paymentService.issueBillingAndPay(memberId, request);
         return ApiResponse.ok();
     }
 }

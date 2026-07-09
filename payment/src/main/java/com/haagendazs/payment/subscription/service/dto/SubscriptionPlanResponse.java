@@ -1,7 +1,7 @@
-package com.haagendazs.payment.Subscription.service.dto;
+package com.haagendazs.payment.subscription.service.dto;
 
-import com.haagendazs.payment.Subscription.enums.PlanStatus;
-import com.haagendazs.payment.Subscription.enums.PlanType;
+import com.haagendazs.payment.subscription.enums.PlanStatus;
+import com.haagendazs.payment.subscription.enums.PlanType;
 import com.haagendazs.payment.product.service.dto.ProductDetailResponse;
 
 public record SubscriptionPlanResponse(

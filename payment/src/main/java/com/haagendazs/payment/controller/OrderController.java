@@ -15,6 +15,7 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    //구독 주문
     @PostMapping("/{workspaceId}/subscription")
     public ApiResponse<OrderCreateResponse> createSubscriptionOrder(
             @RequestHeader("X-Member-Id")
