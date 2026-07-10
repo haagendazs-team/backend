@@ -1,5 +1,6 @@
 plugins {
     id 'org.springframework.boot'
+    id 'jacoco'
 }
 
 // payment 서비스 — MVC(Tomcat) 기반 결제 도메인
@@ -35,4 +36,31 @@ dependencies {
 
     //카프카
     implementation 'org.springframework.kafka:spring-kafka'
+}
+
+jacoco {
+    toolVersion = '0.8.15'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    // 커버리지 집계 대상: 서비스 로직과 도메인 엔티티
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, include: [
+                'com/haagendazs/payment/**/service/**',
+                'com/haagendazs/payment/**/entity/**',
+            ], exclude: [
+                'com/haagendazs/payment/**/service/dto/**',
+                'com/haagendazs/payment/**/service/tools/TossBillingClient.class',
+                'com/haagendazs/payment/**/service/tools/TossPaymentConfig.class',
+                'com/haagendazs/payment/**/global/SubscriptionExpirationScheduler.class',
+                'com/haagendazs/payment/**/Q*.class',
+            ])
+        }))
+    }
 }

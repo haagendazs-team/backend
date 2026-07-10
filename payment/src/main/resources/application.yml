@@ -16,7 +16,9 @@ spring:
       minimum-idle: ${HIKARI_MIN_IDLE:2}
   jpa:
     hibernate:
-      ddl-auto: validate
+      # TODO: Flyway 테이블 migration이 준비되면 validate로 되돌리기
+      # ddl-auto: validate
+      ddl-auto: create-drop
     open-in-view: false
   flyway:
     locations: classpath:db/migration
