@@ -2,6 +2,7 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.application.dto.SettingResult;
 import com.haagendazs.application.dto.UpdateSettingCommand;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.EventTypeDefinition;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.anyString;
 
 @ExtendWith(MockitoExtension.class)
 class SettingServiceJunitTest {
@@ -45,12 +47,14 @@ class SettingServiceJunitTest {
     @Mock
     private NotificationProperties properties;
 
+    @Mock
+    private SettingCachePort settingCachePort;
+
     private EventTypeDefinition enabledDef;
 
     @BeforeEach
     void setUp() {
-        enabledDef = EventTypeDefinition.of("TICKET_OPEN", "notif:stream:ticket.open",
-                false, true, "memberId", null, 0);
+        enabledDef = EventTypeDefinition.of("TICKET_OPEN", false, true);
     }
 
     @Test
@@ -93,8 +97,7 @@ class SettingServiceJunitTest {
     @DisplayName("등록된 활성 이벤트 타입이 여러 개일 때 모든 설정 항목을 반환한다")
     void getSettings_multipleEventTypes_returnsAll() {
         // GIVEN
-        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", "notif:stream:game.start",
-                false, true, "memberId", null, 0);
+        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", false, true);
         SettingEntry entry1 = SettingEntry.create(1L, "TICKET_OPEN");
         SettingEntry entry2 = SettingEntry.create(1L, "GAME_START");
         when(eventTypeRegistry.getAllDefinitions()).thenReturn(List.of(enabledDef, anotherDef));
@@ -121,6 +124,7 @@ class SettingServiceJunitTest {
         when(settingEntryRepository.findByMemberIdAndEventTypeCode(1L, "TICKET_OPEN"))
                 .thenReturn(Mono.just(existing));
         when(settingEntryRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(settingCachePort.isCached(1L)).thenReturn(Mono.just(false));
 
         // WHEN
         SettingResult result = settingService.updateSetting(1L,
@@ -140,6 +144,7 @@ class SettingServiceJunitTest {
         when(settingEntryRepository.findByMemberIdAndEventTypeCode(1L, "TICKET_OPEN"))
                 .thenReturn(Mono.empty());
         when(settingEntryRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(settingCachePort.isCached(1L)).thenReturn(Mono.just(false));
 
         // WHEN
         SettingResult result = settingService.updateSetting(1L,

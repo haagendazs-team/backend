@@ -21,23 +21,11 @@ public class EventTypeDefinition implements Persistable<String> {
     @Id
     private String code;
 
-    @Column("stream_key")
-    private String streamKey;
-
     @Column("is_scheduled")
     private boolean scheduled;
 
     @Column("is_single_target")
     private boolean singleTarget;
-
-    @Column("member_id_field")
-    private String memberIdField;
-
-    @Column("scheduled_at_field")
-    private String scheduledAtField;
-
-    @Column("scheduled_offset_minutes")
-    private int scheduledOffsetMinutes;
 
     @Column("is_enabled")
     private boolean enabled;
@@ -53,18 +41,11 @@ public class EventTypeDefinition implements Persistable<String> {
     @Transient
     private boolean newEntity;
 
-    public static EventTypeDefinition of(String code, String streamKey,
-                                          boolean isScheduled, boolean isSingleTarget,
-                                          String memberIdField, String scheduledAtField,
-                                          int scheduledOffsetMinutes) {
+    public static EventTypeDefinition of(String code, boolean isScheduled, boolean isSingleTarget) {
         EventTypeDefinition def = new EventTypeDefinition();
         def.code = code;
-        def.streamKey = streamKey;
         def.scheduled = isScheduled;
         def.singleTarget = isSingleTarget;
-        def.memberIdField = memberIdField;
-        def.scheduledAtField = scheduledAtField;
-        def.scheduledOffsetMinutes = scheduledOffsetMinutes;
         def.enabled = true;
         def.newEntity = true;
         return def;

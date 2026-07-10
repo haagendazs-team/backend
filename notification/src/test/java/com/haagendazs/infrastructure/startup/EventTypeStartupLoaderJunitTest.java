@@ -2,7 +2,6 @@ package com.haagendazs.infrastructure.startup;
 
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.repository.EventTypeRepository;
-import com.haagendazs.infrastructure.consumer.StreamSubscriptionManager;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,21 +28,16 @@ class EventTypeStartupLoaderJunitTest {
     @Mock
     private EventTypeRegistry registry;
 
-    @Mock
-    private StreamSubscriptionManager subscriptionManager;
-
     @Test
-    @DisplayName("run 시 활성 이벤트 타입을 레지스트리에 등록하고 구독을 시작한다")
-    void run_registersAndSubscribesAllEnabledEventTypes() throws Exception {
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.open", false, true, "memberId", null, 0);
+    @DisplayName("run 시 활성 이벤트 타입을 레지스트리에 등록한다")
+    void run_registersAllEnabledEventTypes() throws Exception {
+        EventTypeDefinition def = EventTypeDefinition.of("TICKET_OPEN", false, true);
         when(eventTypeRepository.findAllEnabled()).thenReturn(Flux.just(def));
         when(registry.getAllDefinitions()).thenReturn(List.of(def));
 
         startupLoader.run(null);
 
         verify(registry).register(def);
-        verify(subscriptionManager).startSubscription(def);
     }
 
     @Test

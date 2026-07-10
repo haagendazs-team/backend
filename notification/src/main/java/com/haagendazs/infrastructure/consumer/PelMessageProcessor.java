@@ -115,7 +115,7 @@ public class PelMessageProcessor {
             return Mono.empty();
         }
         try {
-            Long memberId = payloadParser.extractMemberId(event.getPayload(), definition);
+            Long memberId = payloadParser.extractTargetMemberId(payloadParser.parse(event.getPayload()));
             return notificationRepository.existsByEventIdAndMemberId(event.getId(), memberId)
                     .filter(exists -> !exists)
                     .flatMap(ignored -> notificationRepository.save(Notification.create(memberId, event.getId())))

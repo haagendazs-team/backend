@@ -43,7 +43,7 @@ class SseEmitterManagerJunitExceptionTest {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         meterRegistry = new SimpleMeterRegistry();
-        when(properties.sse()).thenReturn(new NotificationProperties.Sse(30000L, "0 * * * * *", 5000L));
+        when(properties.sse()).thenReturn(new NotificationProperties.Sse(30000L, 30000L, "0/30 * * * * *"));
 
         sseEmitterManager = new SseEmitterManager(properties, meterRegistry, redisTemplate, objectMapper);
         sseEmitterManager.initMetrics();

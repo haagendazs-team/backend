@@ -2,6 +2,7 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.domain.model.Event;
 import com.haagendazs.domain.model.EventTypeDefinition;
+import com.haagendazs.domain.model.NotificationEnvelope;
 import com.haagendazs.domain.repository.SettingEntryRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,7 @@ public class FanoutService {
 
     public Mono<Boolean> fanout(Event event, EventTypeDefinition definition, String payload) {
         if (definition.isSingleTarget()) {
-            return fanoutSingleTarget(event, definition, payload);
+            return fanoutSingleTarget(event, payload);
         }
         return fanoutBroadcast(event, definition, payload);
     }
@@ -34,28 +35,30 @@ public class FanoutService {
     public Mono<Void> fanoutBuffered(Event event, EventTypeDefinition definition, String payload,
                                       String streamKey, RecordId recordId) {
         if (definition.isSingleTarget()) {
-            return fanoutSingleTargetBuffered(event, definition, payload, streamKey, recordId);
+            return fanoutSingleTargetBuffered(event, payload, streamKey, recordId);
         }
         return fanoutBroadcastBuffered(event, definition, payload, streamKey, recordId);
     }
 
-    private Mono<Boolean> fanoutSingleTarget(Event event, EventTypeDefinition definition, String payload) {
+    private Mono<Boolean> fanoutSingleTarget(Event event, String payload) {
         try {
-            Long memberId = payloadParser.extractMemberId(payload, definition);
+            NotificationEnvelope envelope = payloadParser.parse(payload);
+            Long memberId = payloadParser.extractTargetMemberId(envelope);
             return chunkService.processChunk(event, List.of(memberId), payload);
         } catch (Exception e) {
-            log.error("{} payload에서 memberId 추출 실패", definition.getCode(), e);
+            log.error("{} payload에서 targetMemberId 추출 실패", event.getEventTypeCode(), e);
             return Mono.just(true);
         }
     }
 
-    private Mono<Void> fanoutSingleTargetBuffered(Event event, EventTypeDefinition definition,
-                                                    String payload, String streamKey, RecordId recordId) {
+    private Mono<Void> fanoutSingleTargetBuffered(Event event, String payload,
+                                                   String streamKey, RecordId recordId) {
         try {
-            Long memberId = payloadParser.extractMemberId(payload, definition);
+            NotificationEnvelope envelope = payloadParser.parse(payload);
+            Long memberId = payloadParser.extractTargetMemberId(envelope);
             return bufferedChunkService.enqueueChunk(event, List.of(memberId), payload, streamKey, recordId);
         } catch (Exception e) {
-            log.error("{} payload에서 memberId 추출 실패 (buffered)", definition.getCode(), e);
+            log.error("{} payload에서 targetMemberId 추출 실패 (buffered)", event.getEventTypeCode(), e);
             return Mono.empty();
         }
     }
@@ -72,7 +75,7 @@ public class FanoutService {
     }
 
     private Mono<Void> fanoutBroadcastBuffered(Event event, EventTypeDefinition definition,
-                                                 String payload, String streamKey, RecordId recordId) {
+                                                String payload, String streamKey, RecordId recordId) {
         return fetchAllMemberIds(definition)
                 .buffer(properties.fanout().chunkSize())
                 .flatMap(chunk -> bufferedChunkService.enqueueChunk(event, chunk, payload, streamKey, recordId)
