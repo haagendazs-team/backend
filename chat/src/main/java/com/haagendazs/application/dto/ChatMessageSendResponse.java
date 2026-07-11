@@ -15,5 +15,7 @@ public record ChatMessageSendResponse(
     Long channelId,
     Long senderId,
     String content,
-    LocalDateTime createAt
-) { }
+    LocalDateTime createdAt,
+    LocalDateTime senddAt
+) {}
+

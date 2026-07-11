@@ -25,7 +25,7 @@ public class ChatMember {
     @Column(length = 255)
     private String profileImageUrl;
 
-    @Column(nullable = false)
+    @Column(nullable = false, name = "synced_at")
     private LocalDateTime syncedAt;
 
     @Builder

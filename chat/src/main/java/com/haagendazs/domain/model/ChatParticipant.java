@@ -4,10 +4,7 @@ import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
 
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Entity
 @Table(
@@ -15,7 +12,7 @@ import lombok.Setter;
         uniqueConstraints = @UniqueConstraint(columnNames = {"channel_id", "member_id"})
 )
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ChatParticipant {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,19 +24,19 @@ public class ChatParticipant {
     @Column(nullable = false)
     private Long memberId;
 
-    private Long lastMessageId;
+    private Long lastReadMessageId;
 
     @Column(nullable = false)
-    private LocalDateTime joinAt;
+    private LocalDateTime joinedAt;
 
     @Builder
-    private ChatParticipant(Long channelId, Long memberId){
+    private ChatParticipant(Long channelId, Long memberId) {
         this.channelId = channelId;
         this.memberId = memberId;
-        this.joinAt = LocalDateTime.now();
+        this.joinedAt = LocalDateTime.now();
     }
 
-    public void updateLastMessageId(Long messageId){
-        this.lastMessageId = messageId;
+    public void updateLastReadMessage(Long messageId) {
+        this.lastReadMessageId = messageId;
     }
 }

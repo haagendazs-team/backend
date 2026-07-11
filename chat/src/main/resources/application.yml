@@ -16,20 +16,21 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     properties:
       hibernate:
         default_schema: chat
         format_sql: true
+        hbm2ddl.create_namespaces: true
     show-sql: true
 
-  flyway:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
-    user: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
-    locations: classpath:db/migration
-    schemas: chat
-    table: flyway_schema_history
+#  flyway:
+#    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
+#    user: ${POSTGRES_USER}
+#    password: ${POSTGRES_PASSWORD}
+#    locations: classpath:db/migration
+#    schemas: chat
+#    table: flyway_schema_history
 
   data:
     redis:
@@ -59,6 +60,7 @@ management:
 
 eureka:
   client:
+    enabled: false #로컬테스트를 위해 잠시 false
     service-url:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
