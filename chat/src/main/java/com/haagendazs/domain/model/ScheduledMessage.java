@@ -1,5 +1,7 @@
 package com.haagendazs.domain.model;
 
+import com.haagendazs.common.exception.BusinessException;
+import com.haagendazs.domain.exception.ChatErrorCode;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -55,4 +57,13 @@ public class ScheduledMessage {
         this.status = ScheduledMessageStatus.CANCELLED;
     }
 
+    public void cancelBy(Long senderId){
+        if(!this.senderId.equals(senderId)){
+            throw new BusinessException(ChatErrorCode.NOT_A_ROOM_MEMBER);
+        }
+        if(this.status != ScheduledMessageStatus.PENDING){
+            throw new BusinessException(ChatErrorCode.SCHEDULE_MESSAGE_NOT_FOUND);
+        }
+        this.status = ScheduledMessageStatus.CANCELLED;
+    }
 }
