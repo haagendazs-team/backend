@@ -3,6 +3,10 @@ package com.haagendazs.member.application.service;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.WorkspaceMemberResult;
 import com.haagendazs.member.application.dto.WorkspaceResult;
+import com.haagendazs.member.application.port.ChatEventPublisher;
+import com.haagendazs.member.application.port.MembershipEventPublisher;
+import com.haagendazs.member.application.port.PaymentEventPublisher;
+import com.haagendazs.member.application.port.SearchIndexEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Member;
 import com.haagendazs.member.domain.model.Workspace;
@@ -12,6 +16,7 @@ import com.haagendazs.member.domain.repository.MemberRepository;
 import com.haagendazs.member.domain.repository.WorkspaceMemberRepository;
 import com.haagendazs.member.domain.repository.WorkspaceRepository;
 import com.haagendazs.member.fixture.TestFixture;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +30,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +54,21 @@ class WorkspaceServiceJunitTest {
     @Mock
     private MemberRepository memberRepository;
 
+    @Mock
+    private MembershipEventPublisher membershipEventPublisher;
+
+    @Mock
+    private SearchIndexEventPublisher searchIndexEventPublisher;
+
+    @Mock
+    private ChatEventPublisher chatEventPublisher;
+
+    @Mock
+    private PaymentEventPublisher paymentEventPublisher;
+
+    @Mock
+    private TransactionAfterCommitExecutor afterCommitExecutor;
+
     @Test
     @DisplayName("[Happy] 워크스페이스 생성 시 생성자를 OWNER로 등록한다")
     void createWorkspace_success_assignsOwnerRole() {
@@ -55,12 +77,21 @@ class WorkspaceServiceJunitTest {
             return TestFixture.workspace(1L, workspace.getName());
         });
         when(workspaceMemberRepository.save(any(WorkspaceMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(TestFixture.member(1L, "example@example.com", "encoded", "user")));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         WorkspaceResult result = workspaceService.createWorkspace(1L, WORKSPACE_NAME, null);
 
         assertThat(result.workspaceId()).isEqualTo(1L);
         assertThat(result.name()).isEqualTo(WORKSPACE_NAME);
         assertThat(result.subscription()).isEqualTo("FREE");
+        verify(membershipEventPublisher).publishWorkspaceJoined(1L, 1L);
+        verify(chatEventPublisher).publishWorkspaceMemberJoined(any(Member.class), eq(1L));
+        verify(paymentEventPublisher).publishWorkspaceCreated(1L);
     }
 
     @Test
@@ -108,10 +139,16 @@ class WorkspaceServiceJunitTest {
         WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
         when(workspaceRepository.findById(1L)).thenReturn(Optional.of(workspace));
         when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         workspaceService.deleteWorkspace(1L, 1L);
 
         verify(workspaceRepository).delete(workspace);
+        verify(searchIndexEventPublisher).publishWorkspaceDeleted(1L);
     }
 
     @Test
@@ -125,11 +162,18 @@ class WorkspaceServiceJunitTest {
         when(memberRepository.findByEmail(INVITE_EMAIL)).thenReturn(Optional.of(target));
         when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.empty());
         when(workspaceMemberRepository.save(any(WorkspaceMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         WorkspaceMemberResult result = workspaceService.inviteMember(1L, 1L, INVITE_EMAIL, "MEMBER");
 
         assertThat(result.memberId()).isEqualTo(2L);
         assertThat(result.role()).isEqualTo("MEMBER");
+        verify(membershipEventPublisher).publishWorkspaceJoined(2L, 1L);
+        verify(chatEventPublisher).publishWorkspaceMemberJoined(target, 1L);
     }
 
     @Test
@@ -161,5 +205,23 @@ class WorkspaceServiceJunitTest {
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo(WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("[Happy] 워크스페이스 탈퇴에 성공하면 멤버십을 삭제하고 Kafka 이벤트를 발행한다")
+    void leaveWorkspace_success_deletesMembershipAndPublishesEvent() {
+        WorkspaceMember member = TestFixture.workspaceMember(1L, 2L, WorkspaceRole.MEMBER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.of(member));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
+
+        workspaceService.leaveWorkspace(2L, 1L);
+
+        verify(workspaceMemberRepository).deleteByWorkspaceIdAndMemberId(1L, 2L);
+        verify(membershipEventPublisher).publishWorkspaceLeft(2L, 1L);
     }
 }

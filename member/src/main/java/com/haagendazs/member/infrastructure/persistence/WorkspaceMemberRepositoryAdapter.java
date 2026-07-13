@@ -33,4 +33,9 @@ public class WorkspaceMemberRepositoryAdapter implements WorkspaceMemberReposito
     public Optional<WorkspaceMember> findByWorkspaceIdAndMemberId(Long workspaceId, Long memberId) {
         return jpaRepository.findByWorkspaceIdAndMemberId(workspaceId, memberId);
     }
+
+    @Override
+    public void deleteByWorkspaceIdAndMemberId(Long workspaceId, Long memberId) {
+        jpaRepository.deleteByWorkspaceIdAndMemberId(workspaceId, memberId);
+    }
 }

@@ -3,12 +3,16 @@ package com.haagendazs.member.application.service;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.ChannelMemberResult;
 import com.haagendazs.member.application.dto.ChannelResult;
+import com.haagendazs.member.application.port.ChatEventPublisher;
+import com.haagendazs.member.application.port.MembershipEventPublisher;
+import com.haagendazs.member.application.port.SearchIndexEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Channel;
 import com.haagendazs.member.domain.model.ChannelMember;
 import com.haagendazs.member.domain.repository.ChannelMemberRepository;
 import com.haagendazs.member.domain.repository.ChannelRepository;
 import com.haagendazs.member.domain.repository.WorkspaceMemberRepository;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +28,10 @@ public class ChannelService {
     private final ChannelMemberRepository channelMemberRepository;
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final WorkspaceService workspaceService;
+    private final MembershipEventPublisher membershipEventPublisher;
+    private final SearchIndexEventPublisher searchIndexEventPublisher;
+    private final ChatEventPublisher chatEventPublisher;
+    private final TransactionAfterCommitExecutor afterCommitExecutor;
 
     public List<ChannelResult> getMyChannelsInWorkspace(Long memberId, Long workspaceId) {
         workspaceService.validateWorkspaceMember(memberId, workspaceId);
@@ -43,6 +51,12 @@ public class ChannelService {
 
         Channel channel = channelRepository.save(Channel.create(workspaceId, name, false));
         channelMemberRepository.save(ChannelMember.add(channel.getChannelId(), memberId));
+        afterCommitExecutor.runAfterCommit(() -> {
+            searchIndexEventPublisher.publishChannelCreated(channel);
+            membershipEventPublisher.publishChannelJoined(memberId, channel.getChannelId(), workspaceId);
+            chatEventPublisher.publishChannelCreated(channel);
+            chatEventPublisher.publishChannelMemberJoined(channel.getChannelId(), memberId);
+        });
         return ChannelResult.from(channel);
     }
 
@@ -58,13 +72,22 @@ public class ChannelService {
         Channel channel = getChannelOrThrow(channelId);
         validateChannelMember(memberId, channelId);
         channel.updateName(name);
-        return ChannelResult.from(channelRepository.save(channel));
+        Channel saved = channelRepository.save(channel);
+        afterCommitExecutor.runAfterCommit(() -> {
+            searchIndexEventPublisher.publishChannelRenamed(saved);
+            chatEventPublisher.publishChannelUpdated(saved);
+        });
+        return ChannelResult.from(saved);
     }
 
     @Transactional
     public void deleteChannel(Long memberId, Long channelId) {
         Channel channel = getChannelOrThrow(channelId);
         validateChannelMember(memberId, channelId);
+        afterCommitExecutor.runAfterCommit(() -> {
+            searchIndexEventPublisher.publishChannelDeleted(channelId);
+            chatEventPublisher.publishChannelDeleted(channelId);
+        });
         channelMemberRepository.deleteAllByChannelId(channelId);
         channelRepository.delete(channel);
     }
@@ -83,6 +106,10 @@ public class ChannelService {
     public void leaveChannel(Long memberId, Long channelId) {
         validateChannelMember(memberId, channelId);
         channelMemberRepository.deleteByChannelIdAndMemberId(channelId, memberId);
+        afterCommitExecutor.runAfterCommit(() -> {
+            membershipEventPublisher.publishChannelLeft(memberId, channelId);
+            chatEventPublisher.publishChannelMemberDeleted(channelId, memberId);
+        });
     }
 
     @Transactional
@@ -105,6 +132,14 @@ public class ChannelService {
         Channel channel = channelRepository.save(Channel.create(workspaceId, dmName, true));
         channelMemberRepository.save(ChannelMember.add(channel.getChannelId(), memberId));
         channelMemberRepository.save(ChannelMember.add(channel.getChannelId(), targetMemberId));
+        afterCommitExecutor.runAfterCommit(() -> {
+            searchIndexEventPublisher.publishChannelCreated(channel);
+            membershipEventPublisher.publishChannelJoined(memberId, channel.getChannelId(), workspaceId);
+            membershipEventPublisher.publishChannelJoined(targetMemberId, channel.getChannelId(), workspaceId);
+            chatEventPublisher.publishChannelCreated(channel);
+            chatEventPublisher.publishChannelMemberJoined(channel.getChannelId(), memberId);
+            chatEventPublisher.publishChannelMemberJoined(channel.getChannelId(), targetMemberId);
+        });
         return ChannelResult.from(channel);
     }
 

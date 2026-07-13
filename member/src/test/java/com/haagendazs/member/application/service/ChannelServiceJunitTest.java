@@ -2,6 +2,9 @@ package com.haagendazs.member.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.ChannelResult;
+import com.haagendazs.member.application.port.ChatEventPublisher;
+import com.haagendazs.member.application.port.MembershipEventPublisher;
+import com.haagendazs.member.application.port.SearchIndexEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Channel;
 import com.haagendazs.member.domain.model.ChannelMember;
@@ -11,6 +14,7 @@ import com.haagendazs.member.domain.repository.ChannelMemberRepository;
 import com.haagendazs.member.domain.repository.ChannelRepository;
 import com.haagendazs.member.domain.repository.WorkspaceMemberRepository;
 import com.haagendazs.member.fixture.TestFixture;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,6 +54,18 @@ class ChannelServiceJunitTest {
     @Mock
     private WorkspaceService workspaceService;
 
+    @Mock
+    private MembershipEventPublisher membershipEventPublisher;
+
+    @Mock
+    private SearchIndexEventPublisher searchIndexEventPublisher;
+
+    @Mock
+    private ChatEventPublisher chatEventPublisher;
+
+    @Mock
+    private TransactionAfterCommitExecutor afterCommitExecutor;
+
     @Test
     @DisplayName("[Happy] 채널 생성 시 생성자를 채널 멤버로 등록한다")
     void createChannel_success_addsCreatorAsMember() {
@@ -59,12 +76,21 @@ class ChannelServiceJunitTest {
             return TestFixture.channel(10L, channel.getWorkspaceId(), channel.getName(), false);
         });
         when(channelMemberRepository.save(any(ChannelMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         ChannelResult result = channelService.createChannel(1L, 1L, CHANNEL_NAME);
 
         assertThat(result.channelId()).isEqualTo(10L);
         assertThat(result.name()).isEqualTo(CHANNEL_NAME);
         assertThat(result.isDirectMessage()).isFalse();
+        verify(searchIndexEventPublisher).publishChannelCreated(any(Channel.class));
+        verify(membershipEventPublisher).publishChannelJoined(1L, 10L, 1L);
+        verify(chatEventPublisher).publishChannelCreated(any(Channel.class));
+        verify(chatEventPublisher).publishChannelMemberJoined(10L, 1L);
     }
 
     @Test
@@ -111,12 +137,23 @@ class ChannelServiceJunitTest {
             return TestFixture.channel(20L, channel.getWorkspaceId(), channel.getName(), true);
         });
         when(channelMemberRepository.save(any(ChannelMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         ChannelResult result = channelService.getOrCreateDmChannel(1L, 1L, 2L);
 
         assertThat(result.channelId()).isEqualTo(20L);
         assertThat(result.isDirectMessage()).isTrue();
         assertThat(result.name()).isEqualTo("dm-1-2");
+        verify(searchIndexEventPublisher).publishChannelCreated(any(Channel.class));
+        verify(membershipEventPublisher).publishChannelJoined(1L, 20L, 1L);
+        verify(membershipEventPublisher).publishChannelJoined(2L, 20L, 1L);
+        verify(chatEventPublisher).publishChannelCreated(any(Channel.class));
+        verify(chatEventPublisher).publishChannelMemberJoined(20L, 1L);
+        verify(chatEventPublisher).publishChannelMemberJoined(20L, 2L);
     }
 
     @Test
@@ -141,10 +178,17 @@ class ChannelServiceJunitTest {
     @DisplayName("[Happy] 채널 나가기에 성공하면 채널 멤버 정보를 삭제한다")
     void leaveChannel_success_deletesChannelMember() {
         when(channelMemberRepository.existsByChannelIdAndMemberId(10L, 1L)).thenReturn(true);
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
 
         channelService.leaveChannel(1L, 10L);
 
         verify(channelMemberRepository).deleteByChannelIdAndMemberId(10L, 1L);
+        verify(membershipEventPublisher).publishChannelLeft(1L, 10L);
+        verify(chatEventPublisher).publishChannelMemberDeleted(10L, 1L);
     }
 
     @Test

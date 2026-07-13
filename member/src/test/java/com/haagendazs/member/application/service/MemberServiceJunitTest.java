@@ -2,11 +2,14 @@ package com.haagendazs.member.application.service;
 
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.MemberResult;
+import com.haagendazs.member.application.port.ChatEventPublisher;
+import com.haagendazs.member.application.port.MemberEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Member;
 import com.haagendazs.member.domain.repository.MemberRepository;
 import com.haagendazs.member.domain.repository.TokenRepository;
 import com.haagendazs.member.fixture.TestFixture;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +40,15 @@ class MemberServiceJunitTest {
 
     @Mock
     private TokenRepository tokenRepository;
+
+    @Mock
+    private MemberEventPublisher memberEventPublisher;
+
+    @Mock
+    private ChatEventPublisher chatEventPublisher;
+
+    @Mock
+    private TransactionAfterCommitExecutor afterCommitExecutor;
 
     @Test
     @DisplayName("[Happy] 내 프로필 조회에 성공하면 활성 회원 정보를 반환한다")
@@ -77,12 +90,18 @@ class MemberServiceJunitTest {
     void updateMyProfile_success_returnsUpdatedProfile() {
         Member member = TestFixture.member(1L, EMAIL, "encoded", NICKNAME);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
         when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         MemberResult result = memberService.updateMyProfile(1L, "user2", "https://image.example.com/profile.png");
 
         assertThat(result.nickname()).isEqualTo("user2");
         assertThat(result.profileImageUrl()).isEqualTo("https://image.example.com/profile.png");
+        verify(chatEventPublisher).publishMemberUpdated(member);
     }
 
     @Test
@@ -90,11 +109,18 @@ class MemberServiceJunitTest {
     void withdraw_success_deactivatesMemberAndDeletesToken() {
         Member member = TestFixture.member(1L, EMAIL, "encoded", NICKNAME);
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
         when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         memberService.withdraw(1L);
 
         assertThat(member.getIsActive()).isFalse();
         verify(tokenRepository).deleteByMemberId(1L);
+        verify(memberEventPublisher).publishDeactivated(member);
+        verify(chatEventPublisher).publishMemberDeleted(member);
     }
 }

@@ -3,6 +3,8 @@ package com.haagendazs.member.application.service;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.MemberResult;
 import com.haagendazs.member.application.dto.TokenResult;
+import com.haagendazs.member.application.port.MemberEventPublisher;
+import com.haagendazs.member.application.port.NotificationEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Member;
 import com.haagendazs.member.domain.model.Token;
@@ -10,6 +12,8 @@ import com.haagendazs.member.domain.repository.MemberRepository;
 import com.haagendazs.member.domain.repository.TokenRepository;
 import com.haagendazs.member.fixture.TestFixture;
 import com.haagendazs.member.infrastructure.config.JwtProperties;
+import com.haagendazs.member.infrastructure.kafka.EmailVerificationCodeGenerator;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import com.haagendazs.member.infrastructure.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,6 +63,18 @@ class AuthServiceJunitTest {
     @Mock
     private JwtProperties jwtProperties;
 
+    @Mock
+    private MemberEventPublisher memberEventPublisher;
+
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
+    @Mock
+    private EmailVerificationCodeGenerator emailVerificationCodeGenerator;
+
+    @Mock
+    private TransactionAfterCommitExecutor afterCommitExecutor;
+
     @BeforeEach
     void setUp() {
         lenient().when(jwtProperties.getRefreshExpirationMs()).thenReturn(3_600_000L);
@@ -79,6 +96,12 @@ class AuthServiceJunitTest {
     void signup_success_returnsMemberResult() {
         when(memberRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn("encoded-password");
+        when(emailVerificationCodeGenerator.generate()).thenReturn("123456");
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
         when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> {
             Member member = invocation.getArgument(0);
             return TestFixture.member(1L, member.getEmail(), member.getPassword(), member.getNickname());
@@ -89,6 +112,8 @@ class AuthServiceJunitTest {
         assertThat(result.memberId()).isEqualTo(1L);
         assertThat(result.email()).isEqualTo(EMAIL);
         assertThat(result.nickname()).isEqualTo(NICKNAME);
+        verify(notificationEventPublisher).publishEmailCert(EMAIL, "123456");
+        verify(memberEventPublisher).publishCreated(any(Member.class));
     }
 
     @Test

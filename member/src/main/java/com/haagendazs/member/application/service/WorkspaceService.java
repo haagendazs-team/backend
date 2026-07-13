@@ -3,6 +3,10 @@ package com.haagendazs.member.application.service;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.member.application.dto.WorkspaceMemberResult;
 import com.haagendazs.member.application.dto.WorkspaceResult;
+import com.haagendazs.member.application.port.ChatEventPublisher;
+import com.haagendazs.member.application.port.MembershipEventPublisher;
+import com.haagendazs.member.application.port.PaymentEventPublisher;
+import com.haagendazs.member.application.port.SearchIndexEventPublisher;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Member;
 import com.haagendazs.member.domain.model.Workspace;
@@ -11,6 +15,7 @@ import com.haagendazs.member.domain.model.WorkspaceRole;
 import com.haagendazs.member.domain.repository.MemberRepository;
 import com.haagendazs.member.domain.repository.WorkspaceMemberRepository;
 import com.haagendazs.member.domain.repository.WorkspaceRepository;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +30,22 @@ public class WorkspaceService {
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final MemberRepository memberRepository;
+    private final MembershipEventPublisher membershipEventPublisher;
+    private final SearchIndexEventPublisher searchIndexEventPublisher;
+    private final ChatEventPublisher chatEventPublisher;
+    private final PaymentEventPublisher paymentEventPublisher;
+    private final TransactionAfterCommitExecutor afterCommitExecutor;
 
     @Transactional
     public WorkspaceResult createWorkspace(Long memberId, String name, String iconUrl) {
         Workspace workspace = workspaceRepository.save(Workspace.create(name, iconUrl, "FREE"));
         workspaceMemberRepository.save(WorkspaceMember.assign(workspace.getWorkspaceId(), memberId, WorkspaceRole.OWNER));
+        Member owner = getMemberOrThrow(memberId);
+        afterCommitExecutor.runAfterCommit(() -> {
+                membershipEventPublisher.publishWorkspaceJoined(memberId, workspace.getWorkspaceId());
+                chatEventPublisher.publishWorkspaceMemberJoined(owner, workspace.getWorkspaceId());
+                paymentEventPublisher.publishWorkspaceCreated(workspace.getWorkspaceId());
+        });
         return WorkspaceResult.from(workspace);
     }
 
@@ -65,6 +81,7 @@ public class WorkspaceService {
             throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
         }
 
+        afterCommitExecutor.runAfterCommit(() -> searchIndexEventPublisher.publishWorkspaceDeleted(workspaceId));
         workspaceRepository.delete(getWorkspaceOrThrow(workspaceId));
     }
 
@@ -88,7 +105,23 @@ public class WorkspaceService {
         WorkspaceMember invited = workspaceMemberRepository.save(
                 WorkspaceMember.assign(workspaceId, targetMember.getMemberId(), workspaceRole)
         );
+        afterCommitExecutor.runAfterCommit(() -> {
+                membershipEventPublisher.publishWorkspaceJoined(targetMember.getMemberId(), workspaceId);
+                chatEventPublisher.publishWorkspaceMemberJoined(targetMember, workspaceId);
+        });
         return WorkspaceMemberResult.from(invited);
+    }
+
+    @Transactional
+    public void leaveWorkspace(Long memberId, Long workspaceId) {
+        WorkspaceMember workspaceMember = validateWorkspaceMember(memberId, workspaceId);
+        if (workspaceMember.getWorkspaceRole() == WorkspaceRole.OWNER) {
+            throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
+        }
+
+        workspaceMemberRepository.deleteByWorkspaceIdAndMemberId(workspaceId, memberId);
+        afterCommitExecutor.runAfterCommit(() ->
+                membershipEventPublisher.publishWorkspaceLeft(memberId, workspaceId));
     }
 
     public List<WorkspaceMemberResult> getWorkspaceMembers(Long memberId, Long workspaceId) {
@@ -113,5 +146,10 @@ public class WorkspaceService {
         if (!workspaceMember.getWorkspaceRole().canManageWorkspace()) {
             throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
         }
+    }
+
+    private Member getMemberOrThrow(Long memberId) {
+        return memberRepository.findById(memberId)
+                .orElseThrow(() -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND));
     }
 }

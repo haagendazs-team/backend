@@ -106,6 +106,12 @@ public class WorkspaceController {
         return ApiResponse.ok(members);
     }
 
+    @DeleteMapping("/{workspaceId}/members")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leaveWorkspace(@PathVariable Long workspaceId) {
+        workspaceService.leaveWorkspace(SecurityUtils.getCurrentMemberId(), workspaceId);
+    }
+
     public record CreateWorkspaceRequest(
             @NotBlank String name,
             String iconUrl

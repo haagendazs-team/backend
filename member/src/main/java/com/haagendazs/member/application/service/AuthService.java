@@ -6,9 +6,13 @@ import com.haagendazs.member.application.dto.TokenResult;
 import com.haagendazs.member.domain.exception.MemberErrorCode;
 import com.haagendazs.member.domain.model.Member;
 import com.haagendazs.member.domain.model.Token;
+import com.haagendazs.member.application.port.MemberEventPublisher;
+import com.haagendazs.member.application.port.NotificationEventPublisher;
 import com.haagendazs.member.domain.repository.MemberRepository;
 import com.haagendazs.member.domain.repository.TokenRepository;
 import com.haagendazs.member.infrastructure.config.JwtProperties;
+import com.haagendazs.member.infrastructure.kafka.EmailVerificationCodeGenerator;
+import com.haagendazs.member.infrastructure.kafka.TransactionAfterCommitExecutor;
 import com.haagendazs.member.infrastructure.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +31,10 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final MemberEventPublisher memberEventPublisher;
+    private final NotificationEventPublisher notificationEventPublisher;
+    private final EmailVerificationCodeGenerator emailVerificationCodeGenerator;
+    private final TransactionAfterCommitExecutor afterCommitExecutor;
 
     @Transactional
     public MemberResult signup(String email, String password, String nickname) {
@@ -35,7 +43,13 @@ public class AuthService {
         }
 
         Member member = Member.create(email, passwordEncoder.encode(password), nickname);
-        return MemberResult.from(memberRepository.save(member));
+        Member saved = memberRepository.save(member);
+        String verificationCode = emailVerificationCodeGenerator.generate();
+        afterCommitExecutor.runAfterCommit(() -> {
+            notificationEventPublisher.publishEmailCert(email, verificationCode);
+            memberEventPublisher.publishCreated(saved);
+        });
+        return MemberResult.from(saved);
     }
 
     @Transactional

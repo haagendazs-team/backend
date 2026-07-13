@@ -24,6 +24,12 @@ spring:
     # 서비스 전용 스키마에서 히스토리 테이블 관리 (타 서비스와 충돌 방지)
     schemas: member
     table: flyway_schema_history
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
 
 management:
   endpoints:
