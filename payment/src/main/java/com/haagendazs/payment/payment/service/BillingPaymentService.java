@@ -2,6 +2,8 @@ package com.haagendazs.payment.payment.service;
 
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.payment.global.PaymentErrorCode;
+import com.haagendazs.payment.global.kafka.PaymentEventProducer;
+import com.haagendazs.payment.global.kafka.dto.PaymentNotificationPayload;
 import com.haagendazs.payment.order.entity.Orders;
 import com.haagendazs.payment.order.enums.OrderStatus;
 import com.haagendazs.payment.order.enums.OrderType;
@@ -20,6 +22,7 @@ import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
 import com.haagendazs.payment.payment.service.tools.TossBillingClient;
 import com.haagendazs.payment.subscription.service.SubscriptionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,7 @@ import java.time.OffsetDateTime;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BillingPaymentService {
 
     private final PaymentCustomerKeyService paymentCustomerKeyService;
@@ -36,24 +40,33 @@ public class BillingPaymentService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final SubscriptionService subscriptionService;
+    private final PaymentEventProducer paymentEventProducer;
 
     @Transactional
     public void payWithRegisteredBillingMethod(Long memberId, BillingPaymentRequest request) {
-        Orders order = getValidBillingOrder(memberId, request.orderNo());
-        Billing billing = getDefaultBilling(memberId);
-        String customerKey = paymentCustomerKeyService.getCustomerKey(memberId);
+        Orders order = null;
 
-        TossBillingPaymentResponse paymentResponse =
-                executeBillingPayment(order, billing, customerKey);
+        try {
+            order = getValidBillingOrder(memberId, request.orderNo());
+            Billing billing = getDefaultBilling(memberId);
+            String customerKey = paymentCustomerKeyService.getCustomerKey(memberId);
 
-        Payments payment = savePayment(order, paymentResponse);
+            TossBillingPaymentResponse paymentResponse =
+                    executeBillingPayment(order, billing, customerKey);
 
-        if (payment.getPaymentStatus() != PaymentStatus.DONE) {
-            throw new BusinessException(PaymentErrorCode.BILLING_PAYMENT_FAILED);
+            Payments payment = savePayment(order, paymentResponse);
+
+            if (payment.getPaymentStatus() != PaymentStatus.DONE) {
+                throw new BusinessException(PaymentErrorCode.BILLING_PAYMENT_FAILED);
+            }
+
+            order.complete();
+            subscriptionService.activateSubscriptionByPayment(order, billing, payment);
+            publishPaymentCompleted(memberId, order, payment);
+        } catch (RuntimeException e) {
+            publishPaymentFailed(memberId, request.orderNo(), order, e);
+            throw e;
         }
-
-        order.complete();
-        subscriptionService.activateSubscriptionByPayment(order, billing, payment);
     }
 
     private Orders getValidBillingOrder(Long memberId, String orderNo) {
@@ -127,5 +140,68 @@ public class BillingPaymentService {
         OffsetDateTime odt = OffsetDateTime.parse(time);
 
         return odt.toLocalDateTime();
+    }
+
+    private void publishPaymentCompleted(Long memberId, Orders order, Payments payment) {
+        try {
+            paymentEventProducer.publishPaymentCompleted(
+                    memberId,
+                    new PaymentNotificationPayload(
+                            payment.getPaymentStatus().name(),
+                            order.getOrderNo(),
+                            order.getId(),
+                            order.getWorkspaceId(),
+                            payment.getTotalAmount(),
+                            getFirstItemName(order),
+                            payment.getReceiptUrl(),
+                            null,
+                            null,
+                            LocalDateTime.now()
+                    )
+            );
+        } catch (RuntimeException e) {
+            log.warn("결제 성공 알림 Kafka 발행 실패 memberId={} orderNo={}", memberId, order.getOrderNo(), e);
+        }
+    }
+
+    private void publishPaymentFailed(
+            Long memberId,
+            String orderNo,
+            Orders order,
+            RuntimeException exception
+    ) {
+        try {
+            paymentEventProducer.publishPaymentFailed(
+                    memberId,
+                    new PaymentNotificationPayload(
+                            "FAILED",
+                            orderNo,
+                            order == null ? null : order.getId(),
+                            order == null ? null : order.getWorkspaceId(),
+                            order == null ? null : order.getTotalAmount(),
+                            order == null ? null : getFirstItemName(order),
+                            null,
+                            getFailCode(exception),
+                            exception.getMessage(),
+                            LocalDateTime.now()
+                    )
+            );
+        } catch (RuntimeException e) {
+            log.warn("결제 실패 알림 Kafka 발행 실패 memberId={} orderNo={}", memberId, orderNo, e);
+        }
+    }
+
+    private String getFirstItemName(Orders order) {
+        if (order.getOrderItems().isEmpty()) {
+            return null;
+        }
+        return order.getOrderItems().get(0).getItemName();
+    }
+
+    private String getFailCode(RuntimeException exception) {
+        if (exception instanceof BusinessException businessException) {
+            return businessException.getErrorCode().getCode();
+        }
+        return exception.getClass().getSimpleName();
     }
 }

@@ -41,6 +41,9 @@ spring:
       workspace-created: member.workspace.created.v1
       subscription-initialized: payment.subscription-initialized.v1
       subscription-changed: payment.subscription-changed.v1
+      payment-notification: payment.notif.push.v1
+      workspace-subscribed: payment.workspace_subscribed.v1
+      workspace-subscription-expired: payment.workspace_subscription_expired.v1
 
 management:
   endpoints:

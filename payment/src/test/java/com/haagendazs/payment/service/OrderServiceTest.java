@@ -1,18 +1,17 @@
-import com.haagendazs.payment.PaymentApplication;
+package com.haagendazs.payment.service;
+
+import com.haagendazs.payment.TestPaymentApplication;
 import com.haagendazs.payment.order.service.OrderService;
-import com.haagendazs.payment.order.service.dto.OrderCreateRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@SpringBootTest
+@SpringBootTest(classes = TestPaymentApplication.class)
 @Transactional
-@TestPropertySource(locations = "file:.env")
+@ActiveProfiles("test")
 public class OrderServiceTest {
 
     @Autowired
@@ -20,5 +19,7 @@ public class OrderServiceTest {
 
     @Test
     @DisplayName("createOrderTest 성공")
-
+    void createOrderTest() {
+        // TODO: 주문 생성 성공 케이스 작성
+    }
 }

@@ -1,0 +1,56 @@
+spring:
+  config:
+    import: "optional:configserver:"
+  cloud:
+    config:
+      enabled: false
+    discovery:
+      enabled: false
+  datasource:
+    url: "jdbc:h2:mem:payment-test;DATABASE_TO_LOWER=TRUE;INIT=CREATE SCHEMA IF NOT EXISTS payment"
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    defer-datasource-initialization: true
+    open-in-view: false
+  sql:
+    init:
+      mode: always
+  flyway:
+    enabled: false
+  kafka:
+    bootstrap-servers: "${spring.embedded.kafka.brokers:localhost:9092}"
+    consumer:
+      group-id: payment-test
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.haagendazs.payment.global.kafka.dto
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    topics:
+      workspace-created: payment-test.workspace-created.v1
+      subscription-initialized: payment-test.subscription-initialized.v1
+      subscription-changed: payment-test.subscription-changed.v1
+      payment-notification: payment-test.notif.push.v1
+      workspace-subscribed: payment-test.workspace-subscribed.v1
+      workspace-subscription-expired: payment-test.workspace-subscription-expired.v1
+    listener:
+      auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+
+payment:
+  customer-key:
+    hash-secret: test-customer-key-hash-secret
+    encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
+toss:
+  secret-key: test-secret-key

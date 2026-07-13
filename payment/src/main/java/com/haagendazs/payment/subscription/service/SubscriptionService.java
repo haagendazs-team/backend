@@ -5,6 +5,7 @@ import com.haagendazs.payment.global.PaymentErrorCode;
 import com.haagendazs.payment.global.kafka.PaymentEventProducer;
 import com.haagendazs.payment.global.kafka.dto.SubscriptionChangedEvent;
 import com.haagendazs.payment.global.kafka.dto.SubscriptionInitializedEvent;
+import com.haagendazs.payment.global.kafka.dto.WorkspaceSubscribedEvent;
 import com.haagendazs.payment.order.entity.Orders;
 import com.haagendazs.payment.order.service.OrderService;
 import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
@@ -177,10 +178,18 @@ public class SubscriptionService {
                         LocalDateTime.now()
                 )
         );
+        paymentEventProducer.publishWorkspaceSubscribed(
+                new WorkspaceSubscribedEvent(
+                        orders.getWorkspaceId(),
+                        newPlan.getType().name(),
+                        now
+                )
+        );
 
         return null;
     }
 
+    //워크스페이스의 현재 구독 확인
     @Transactional(readOnly = true)
     public GetSubscriptionResponse getWorkspaceSubscription(Long workspaceId){
         Subscriptions subscriptionOpt =
@@ -200,6 +209,7 @@ public class SubscriptionService {
         );
     }
 
+    //워크스페이스의 구독기간 이력 확인
     @Transactional(readOnly = true)
     public List<GetsubscriptionPeriodsResponse> getSubscriptionPeriods(Long workspaceId){
         return subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(workspaceId)
@@ -209,6 +219,7 @@ public class SubscriptionService {
 
     }
 
+    //워크스페이스 구독 변경
     @Transactional
     public ChangeSubscriptionResponse changeSubscription(
             Long memberId,
