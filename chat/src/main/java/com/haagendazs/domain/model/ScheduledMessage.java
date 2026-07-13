@@ -59,7 +59,7 @@ public class ScheduledMessage {
 
     public void cancelBy(Long senderId){
         if(!this.senderId.equals(senderId)){
-            throw new BusinessException(ChatErrorCode.NOT_A_ROOM_MEMBER);
+            throw new BusinessException(ChatErrorCode.NOT_MESSAGE_OWNER);
         }
         if(this.status != ScheduledMessageStatus.PENDING){
             throw new BusinessException(ChatErrorCode.SCHEDULE_MESSAGE_NOT_FOUND);

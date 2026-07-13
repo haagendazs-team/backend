@@ -28,7 +28,7 @@ public class ChatService {
         }
         Message message = Message.builder()
                 .channelId(channelId)
-                .senderId(senderId)
+                .requesterId(senderId)
                 .content(request.message())
                 .build();
         Message savedMessage = messageRepository.save(message);
@@ -80,6 +80,34 @@ public class ChatService {
         }
 
         message.delete();   // soft delete → deleted_at 세팅
+    }
+
+    @Transactional
+    public ChatMessageSendResponse updateMessage(Long channelId, Long messageId, String newContent, Long memberId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND));
+
+        // 메시지가 요청한 채널에 속하는지
+        if (!message.getChannelId().equals(channelId)) {
+            throw new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND);
+        }
+
+        // 현재 채널 참여자인지
+        if (!isRoomParticipant(memberId, channelId)) {
+            throw new BusinessException(ChatErrorCode.NOT_A_ROOM_MEMBER);
+        }
+
+        // 소유자 검증 + 삭제여부 검증 + content 교체 (엔티티가 처리)
+        message.updateContent(newContent, memberId);
+
+        return new ChatMessageSendResponse(
+                message.getMessageId(),
+                message.getChannelId(),
+                message.getSenderId(),
+                message.getContent(),
+                message.getCreatedAt(),
+                null   // 수정에서는 sendAt 지연측정 x
+        );
     }
 
 

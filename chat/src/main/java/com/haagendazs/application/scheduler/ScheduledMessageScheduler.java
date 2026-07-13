@@ -46,7 +46,7 @@ public class ScheduledMessageScheduler {
                 // 1. 실제 메시지로 저장
                 Message message = Message.builder()
                         .channelId(sm.getChannelId())
-                        .senderId(sm.getSenderId())
+                        .requesterId(sm.getSenderId())
                         .content(sm.getContent())
                         .build();
                 Message saved = messageRepository.save(message);

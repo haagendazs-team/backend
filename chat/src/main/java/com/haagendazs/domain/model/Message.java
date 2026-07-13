@@ -1,5 +1,7 @@
 package com.haagendazs.domain.model;
 
+import com.haagendazs.common.exception.BusinessException;
+import com.haagendazs.domain.exception.ChatErrorCode;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -30,14 +32,28 @@ public class Message {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    private LocalDateTime updateAt;
+
     private LocalDateTime deletedAt;
 
+
     @Builder
-    private Message(Long channelId, Long senderId, String content){
+    private Message(Long channelId, Long requesterId, String content){
         this.channelId = channelId;
-        this.senderId = senderId;
+        this.senderId = requesterId;
         this.content = content;
         this.createdAt = LocalDateTime.now();
+    }
+
+    public void updateContent(String newContent, Long requesterId){
+        if(!this.senderId.equals(requesterId)){
+            throw new BusinessException(ChatErrorCode.NOT_MESSAGE_OWNER);
+        }
+        if(isDeleted()){
+            throw new BusinessException(ChatErrorCode.MESSAGE_NOT_FOUND);
+        }
+        this.content = newContent;
+        this.updateAt = LocalDateTime.now();
     }
 
     public void delete() {
@@ -46,5 +62,8 @@ public class Message {
 
     public boolean isDeleted() {
         return this.deletedAt != null;
+    }
+    public boolean isUpdated() {
+        return this.updateAt != null;
     }
 }

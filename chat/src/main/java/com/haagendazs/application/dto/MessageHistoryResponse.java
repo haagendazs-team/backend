@@ -11,7 +11,8 @@ public record MessageHistoryResponse(
         Long senderId,
         String content,
         LocalDateTime createdAt,
-        boolean deleted
+        boolean deleted,
+        boolean edited
 ) {
     //record 같은 경우 반환 타입과 from(메서드 명)을 꼭 명시해주어야한다.
     public static MessageHistoryResponse from(Message message){
@@ -21,7 +22,8 @@ public record MessageHistoryResponse(
                 message.getSenderId(),
                 message.isDeleted() ? "삭제된 메시지입니다" : message.getContent(),
                 message.getCreatedAt(),
-                message.isDeleted()
+                message.isDeleted(),
+                message.isUpdated()
         );
     }
 
