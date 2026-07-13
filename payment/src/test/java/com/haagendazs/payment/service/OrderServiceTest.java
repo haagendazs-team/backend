@@ -17,6 +17,7 @@ public class OrderServiceTest {
     @Autowired
     private OrderService orderService;
 
+    //createOrder 테스트
     @Test
     @DisplayName("createOrderTest 성공")
     void createOrderTest() {

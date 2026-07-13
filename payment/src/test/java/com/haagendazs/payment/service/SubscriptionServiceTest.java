@@ -9,17 +9,29 @@ import com.haagendazs.payment.global.kafka.dto.WorkspaceSubscribedEvent;
 import com.haagendazs.payment.order.entity.Orders;
 import com.haagendazs.payment.order.enums.OrderStatus;
 import com.haagendazs.payment.order.enums.OrderType;
+import com.haagendazs.payment.order.service.OrderService;
+import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
 import com.haagendazs.payment.payment.entity.Billing;
 import com.haagendazs.payment.payment.enums.BillingStatus;
 import com.haagendazs.payment.product.entity.OrderItems;
+import com.haagendazs.payment.product.entity.Products;
+import com.haagendazs.payment.product.enums.ProductStatus;
+import com.haagendazs.payment.product.enums.ProductType;
+import com.haagendazs.payment.product.repository.ProductsRepository;
 import com.haagendazs.payment.subscription.entity.SubscriptionPeriods;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
 import com.haagendazs.payment.subscription.enums.PlanType;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeAction;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
 import com.haagendazs.payment.subscription.enums.SubscriptionStatus;
 import com.haagendazs.payment.subscription.repository.SubscriptionPeriodsRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionPlanRepository;
+import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
 import com.haagendazs.payment.subscription.service.SubscriptionService;
+import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionRequest;
+import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetsubscriptionPeriodsResponse;
 
@@ -30,8 +42,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,8 +72,17 @@ public class SubscriptionServiceTest {
     @Autowired
     private SubscriptionPeriodsRepository subscriptionPeriodsRepository;
 
+    @Autowired
+    private SubscriptionScheduledChangesRepository subscriptionScheduledChangesRepository;
+
+    @Autowired
+    private ProductsRepository productsRepository;
+
     @MockitoBean
     private PaymentEventProducer paymentEventProducer;
+
+    @MockitoBean
+    private OrderService orderService;
 
     @Test
     @DisplayName("워크스페이스 생성시 구독플랜 설정 - succes")
@@ -361,9 +384,229 @@ public class SubscriptionServiceTest {
 
     //changeSubscription 메서드 테스트
     @Test
-    @DisplayName("워크스페이스 구독 변경 - succes")
-    void changeSubscriptionTest(){
+    @DisplayName("워크스페이스 구독 변경 - 상위 플랜 변경시 추가 결제 주문 생성")
+    void changeSubscriptionUpgradeTest(){
         Long workspaceId = 40L;
-        subscriptionService.changeSubscription()
+        Long memberId = 40L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+        when(orderService.createSubscriptionOrderWithAmount(eq(memberId), eq(workspaceId), eq(3L), eq(10000L)))
+                .thenReturn(new OrderCreateResponse(
+                        500L,
+                        "ORDER-500",
+                        "Pro Subscription",
+                        10000L,
+                        OrderType.Billing,
+                        "customer-40"
+                ));
+
+        ChangeSubscriptionResponse response =
+                subscriptionService.changeSubscription(memberId, workspaceId, new ChangeSubscriptionRequest(3L));
+
+        assertThat(response.action()).isEqualTo(SubscriptionChangeAction.PAYMENT_REQUIRED);
+        assertThat(response.orderId()).isEqualTo(500L);
+        assertThat(response.orderNo()).isEqualTo("ORDER-500");
+        assertThat(response.orderName()).isEqualTo("Pro Subscription");
+        assertThat(response.amount()).isEqualTo(10000L);
+        assertThat(response.orderType()).isEqualTo(OrderType.Billing);
+        assertThat(response.customerKey()).isEqualTo("customer-40");
+        verify(orderService).createSubscriptionOrderWithAmount(memberId, workspaceId, 3L, 10000L);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 하위 플랜 변경시 다음 기간 예약")
+    void changeSubscriptionDowngradeScheduledTest(){
+        Long workspaceId = 41L;
+        Long memberId = 41L;
+        LocalDateTime periodEnd = LocalDateTime.now().plusDays(10);
+        Subscriptions subscription = subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(periodEnd)
+                .build());
+
+        ChangeSubscriptionResponse response =
+                subscriptionService.changeSubscription(memberId, workspaceId, new ChangeSubscriptionRequest(2L));
+
+        assertThat(response.action()).isEqualTo(SubscriptionChangeAction.SCHEDULED);
+        assertThat(response.orderId()).isNull();
+        assertThat(subscriptionScheduledChangesRepository.findAll())
+                .singleElement()
+                .satisfies(scheduledChange -> {
+                    assertThat(scheduledChange.getMemberId()).isEqualTo(memberId);
+                    assertThat(scheduledChange.getSubscriptionId()).isEqualTo(subscription.getId());
+                    assertThat(scheduledChange.getRequestedPlanId()).isEqualTo(2L);
+                    assertThat(scheduledChange.getChangeType()).isEqualTo(SubscriptionChangeType.PLAN_CHANGE);
+                    assertThat(scheduledChange.getChangeStatus()).isEqualTo(SubscriptionChangeStatus.SCHEDULED);
+                    assertThat(scheduledChange.getScheduledAt()).isEqualTo(periodEnd);
+                });
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 구독 없음")
+    void changeSubscriptionSubscriptionNotFoundTest(){
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(42L, 42L, new ChangeSubscriptionRequest(2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 현재 플랜 없음")
+    void changeSubscriptionCurrentPlanNotFoundTest(){
+        Long workspaceId = 43L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(999L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(43L, workspaceId, new ChangeSubscriptionRequest(2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PLAN_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 대상 상품 없음")
+    void changeSubscriptionProductNotFoundTest(){
+        Long workspaceId = 44L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(44L, workspaceId, new ChangeSubscriptionRequest(999L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 판매 중지 상품")
+    void changeSubscriptionSuspendedProductTest(){
+        Long workspaceId = 45L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+        Products product = productsRepository.saveAndFlush(Products.builder()
+                .name("Suspended Plus Subscription")
+                .productType(ProductType.SUBSCRIPTION)
+                .price(19900L)
+                .status(ProductStatus.SUSPENDED)
+                .product_detail_id(2L)
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(45L, workspaceId, new ChangeSubscriptionRequest(product.getId())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PRODUCT_SUSPENDED);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 대상 플랜 없음")
+    void changeSubscriptionTargetPlanNotFoundTest(){
+        Long workspaceId = 46L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+        Products product = productsRepository.saveAndFlush(Products.builder()
+                .name("Unknown Plan Subscription")
+                .productType(ProductType.SUBSCRIPTION)
+                .price(19900L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(999L)
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(46L, workspaceId, new ChangeSubscriptionRequest(product.getId())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PLAN_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 현재 플랜 상품 없음")
+    void changeSubscriptionCurrentProductNotFoundTest(){
+        Long workspaceId = 47L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+        productsRepository.deleteById(1L);
+        productsRepository.flush();
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(47L, workspaceId, new ChangeSubscriptionRequest(2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PRODUCT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 같은 플랜 변경 불가")
+    void changeSubscriptionSamePlanTest(){
+        Long workspaceId = 48L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(48L, workspaceId, new ChangeSubscriptionRequest(2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.INVALID_SUBSCRIPTION_CHANGE);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 상위 플랜 추가 결제 금액 없음")
+    void changeSubscriptionUpgradeAmountNotPositiveTest(){
+        Long workspaceId = 49L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(1))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(29))
+                .build());
+        Products product = productsRepository.saveAndFlush(Products.builder()
+                .name("Free Plus Subscription")
+                .productType(ProductType.SUBSCRIPTION)
+                .price(0L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(2L)
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(49L, workspaceId, new ChangeSubscriptionRequest(product.getId())))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.INVALID_SUBSCRIPTION_CHANGE);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
     }
 }
