@@ -1,6 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.application.dto.ChannelResult;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.domain.exception.NotificationErrorCode;
 import com.haagendazs.domain.model.Channel;
@@ -45,6 +46,9 @@ class SettingServiceChannelJunitTest {
 
     @Mock
     private NotificationProperties.Channel channelProperties;
+
+    @Mock
+    private SettingCachePort settingCachePort;
 
     @Test
     @DisplayName("getChannels — 활성 채널 목록을 반환한다")

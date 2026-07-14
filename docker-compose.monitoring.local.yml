@@ -1,4 +1,4 @@
-# 로컬 모니터링 스택 — prometheus(local) + grafana
+ # 로컬 모니터링 스택 — prometheus(local) + grafana
 # 사용법: docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
 
 services:
@@ -7,6 +7,7 @@ services:
     container_name: haagendazs-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
     ports:
       - "9090:9090"
     volumes:
@@ -32,6 +33,29 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: haagendazs-node-exporter
+    mem_limit: 64m
+    ports:
+      - "9100:9100"
+    command:
+      - --collector.netstat
+      - --collector.sockstat
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: haagendazs-cadvisor
+    mem_limit: 128m
+    ports:
+      - "8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
     restart: unless-stopped
 
   postgres-exporter:

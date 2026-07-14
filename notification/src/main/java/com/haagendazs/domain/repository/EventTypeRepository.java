@@ -9,5 +9,4 @@ public interface EventTypeRepository {
     Mono<EventTypeDefinition> findByCode(String code);
     Flux<EventTypeDefinition> findAllEnabled();
     Mono<Boolean> existsByCode(String code);
-    Mono<Boolean> existsByStreamKey(String streamKey);
 }

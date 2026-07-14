@@ -14,12 +14,12 @@ class BufferItemJunitTest {
         Notification notification = Notification.create(1L, 10L);
         RecordId recordId = RecordId.of("1234-0");
 
-        BufferItem item = BufferItem.of(notification, "알림 제목", "{}", "notif:stream:ticket.open", recordId);
+        BufferItem item = BufferItem.of(notification, "알림 제목", "{}", "notif:stream:events", recordId);
 
         assertThat(item.notification()).isEqualTo(notification);
         assertThat(item.subject()).isEqualTo("알림 제목");
         assertThat(item.payload()).isEqualTo("{}");
-        assertThat(item.streamKey()).isEqualTo("notif:stream:ticket.open");
+        assertThat(item.streamKey()).isEqualTo("notif:stream:events");
         assertThat(item.recordId()).isEqualTo(recordId);
     }
 }

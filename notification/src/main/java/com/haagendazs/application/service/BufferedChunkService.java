@@ -5,7 +5,7 @@ import com.haagendazs.domain.model.BufferItem;
 import com.haagendazs.domain.model.Notification;
 import com.haagendazs.domain.model.Event;
 import com.haagendazs.domain.repository.NotificationRepository;
-import com.haagendazs.domain.repository.SettingRepository;
+import com.haagendazs.domain.repository.SettingEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -14,6 +14,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -21,7 +23,7 @@ import java.util.List;
 public class BufferedChunkService {
 
     private final NotificationRepository notificationRepository;
-    private final SettingRepository settingRepository;
+    private final SettingEntryRepository settingEntryRepository;
     private final SseNotificationPort sseNotificationPort;
     private final NotificationBatchBuffer buffer;
     private final BulkPersistService bulkPersistService;
@@ -33,40 +35,47 @@ public class BufferedChunkService {
         }
 
         return notificationRepository.findExistingMemberIdsByEventId(event.getId(), memberIds)
-                .flatMap(alreadyNotified -> settingRepository.findByMemberId(memberIds.get(0))
-                        .flux()
-                        .mergeWith(Flux.fromIterable(memberIds.subList(1, memberIds.size()))
-                                .flatMap(id -> settingRepository.findByMemberId(id)))
-                        .collectMap(s -> s.getMemberId())
-                        .flatMap(settingMap -> {
-                            List<Notification> ssePending = new java.util.ArrayList<>();
-                            List<Notification> directPersist = new java.util.ArrayList<>();
-
-                            for (Long memberId : memberIds) {
-                                if (alreadyNotified.contains(memberId)) {
-                                    continue;
-                                }
-                                var setting = settingMap.get(memberId);
-                                if (setting != null && !setting.isEnabledFor(event.getEventTypeCode())) {
-                                    continue;
-                                }
-                                Notification notification = Notification.create(memberId, event.getId());
-                                if (sseNotificationPort.isConnected(memberId)) {
-                                    ssePending.add(notification);
-                                } else {
-                                    directPersist.add(notification);
-                                }
-                            }
-
-                            Mono<Void> persistMono = directPersist.isEmpty()
-                                    ? Mono.empty()
-                                    : bulkPersistService.persist(event, directPersist, payload).then();
-
-                            ssePending.forEach(notification ->
-                                    buffer.enqueue(BufferItem.of(
-                                            notification, event.getTypeName(), payload, streamKey, recordId)));
-
-                            return persistMono;
-                        }));
+                .flatMap(alreadyNotified ->
+                        settingEntryRepository.findDisabledMemberIdsByEventTypeCode(memberIds, event.getEventTypeCode())
+                                .collect(Collectors.toSet())
+                                .flatMap(disabledIds -> buildAndEnqueue(
+                                        event, memberIds, payload, streamKey, recordId, alreadyNotified, disabledIds)));
     }
+
+    private Mono<Void> buildAndEnqueue(Event event, List<Long> memberIds, String payload,
+                                        String streamKey, RecordId recordId,
+                                        Set<Long> alreadyNotified, Set<Long> disabledIds) {
+        List<Long> candidates = memberIds.stream()
+                .filter(id -> !alreadyNotified.contains(id) && !disabledIds.contains(id))
+                .toList();
+
+        if (candidates.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Flux.fromIterable(candidates)
+                .flatMap(memberId -> sseNotificationPort.isConnected(memberId)
+                        .map(connected -> new MemberConnectionState(memberId, connected)))
+                .collectList()
+                .flatMap(states -> {
+                    List<Notification> ssePending = states.stream()
+                            .filter(MemberConnectionState::connected)
+                            .map(s -> Notification.create(s.memberId(), event.getId()))
+                            .toList();
+
+                    List<Notification> directPersist = states.stream()
+                            .filter(s -> !s.connected())
+                            .map(s -> Notification.create(s.memberId(), event.getId()))
+                            .toList();
+
+                    ssePending.forEach(notification ->
+                            buffer.enqueue(BufferItem.of(notification, event.getTypeName(), payload, streamKey, recordId)));
+
+                    return directPersist.isEmpty()
+                            ? Mono.empty()
+                            : bulkPersistService.persist(event, directPersist, payload).then();
+                });
+    }
+
+    private record MemberConnectionState(Long memberId, boolean connected) {}
 }

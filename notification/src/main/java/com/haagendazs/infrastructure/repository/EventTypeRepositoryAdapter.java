@@ -32,9 +32,4 @@ public class EventTypeRepositoryAdapter implements EventTypeRepository {
     public Mono<Boolean> existsByCode(String code) {
         return r2dbcRepository.existsById(code);
     }
-
-    @Override
-    public Mono<Boolean> existsByStreamKey(String streamKey) {
-        return r2dbcRepository.existsByStreamKey(streamKey);
-    }
 }

@@ -1,0 +1,85 @@
+asyncapi: "2.6.0"
+
+info:
+  title: Notification Service AsyncAPI
+  version: "1.0.0"
+  description: |
+    notification 서비스의 비동기 메시지 스펙.
+    - Kafka: 외부 서비스 → notification 이벤트 수신 (notif.events)
+    - SSE: notification → 클라이언트 실시간 푸시 (별도 REST 스펙 참조)
+
+servers:
+  production:
+    url: "{host}:9092"
+    protocol: kafka
+    description: Apache Kafka 4.0 (KRaft)
+    variables:
+      host:
+        default: localhost
+
+channels:
+  notif.events:
+    description: |
+      외부 서비스(member, payment, search 등)가 알림 이벤트를 발행하는 Kafka 토픽.
+      notification 서비스의 KafkaNotificationConsumer가 구독하여 Redis Stream으로 포워딩한다.
+    subscribe:
+      operationId: onNotifEvent
+      summary: 알림 이벤트 수신
+      description: |
+        consumer group: notification
+        auto.offset.reset: earliest
+      message:
+        $ref: '#/components/messages/NotifEvent'
+
+components:
+  messages:
+    NotifEvent:
+      name: NotifEvent
+      title: 알림 이벤트
+      summary: 단일 또는 다수 수신자에게 발송할 알림 페이로드
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/NotificationEnvelope'
+
+  schemas:
+    NotificationEnvelope:
+      type: object
+      required:
+        - eventTypeCode
+        - payload
+      properties:
+        eventTypeCode:
+          type: string
+          description: 사전 등록된 이벤트 타입 코드 (EventTypeController로 등록)
+          example: "PAYMENT_COMPLETE"
+        memberId:
+          type: integer
+          format: int64
+          description: 단일 대상 수신자 ID (singleTarget=true 인 이벤트에서 사용)
+          example: 42
+        payload:
+          type: string
+          description: 이벤트 본문 JSON 문자열
+          example: '{"orderId":1001,"amount":15000}'
+        scheduledAt:
+          type: string
+          format: date-time
+          description: 예약 발송 시각 (null이면 즉시 발송)
+          example: "2026-07-01T10:00:00Z"
+
+    SseEvent:
+      type: object
+      description: SSE 스트림(/api/notifications/stream)으로 클라이언트에 전달되는 이벤트
+      properties:
+        id:
+          type: integer
+          format: int64
+        eventTypeCode:
+          type: string
+        payload:
+          type: string
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time

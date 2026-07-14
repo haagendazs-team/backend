@@ -1,5 +1,6 @@
 package com.haagendazs.infrastructure.consumer;
 
+import com.haagendazs.application.service.PayloadParser;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
@@ -30,6 +31,7 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
     private final PelMessageProcessor pelMessageProcessor;
     private final NotificationProperties properties;
     private final EventTypeRegistry eventTypeRegistry;
+    private final PayloadParser payloadParser;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -47,8 +49,7 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
         if (!running.get()) {
             return;
         }
-        eventTypeRegistry.getAllDefinitions()
-                .forEach(definition -> reclaimForStream(definition.getStreamKey(), definition));
+        reclaimForStream(RedisStreamsConfig.STREAM_KEY);
     }
 
     @Scheduled(cron = "${notification.scheduler.stream-trim-cron}")
@@ -56,14 +57,13 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
         if (!running.get()) {
             return;
         }
-        Flux.fromIterable(eventTypeRegistry.getAllStreamKeys())
-                .flatMap(streamKey -> redisTemplate.opsForStream()
-                        .trim(streamKey, properties.stream().maxLen(), true)
-                        .doOnSuccess(removed -> log.info("Stream trimmed streamKey={} removed={}", streamKey, removed)))
+        redisTemplate.opsForStream()
+                .trim(RedisStreamsConfig.STREAM_KEY, properties.stream().maxLen(), true)
+                .doOnSuccess(removed -> log.info("Stream trimmed streamKey={} removed={}", RedisStreamsConfig.STREAM_KEY, removed))
                 .subscribe();
     }
 
-    private void reclaimForStream(String streamKey, EventTypeDefinition definition) {
+    private void reclaimForStream(String streamKey) {
         try {
             int batchSize = properties.pel().batchSize();
             redisTemplate.opsForStream()
@@ -82,7 +82,7 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
                                                 "maintenance-consumer",
                                                 entry.getKey(),
                                                 entry.getValue().toArray(new RecordId[0]))
-                                        .flatMap(message -> pelMessageProcessor.process(streamKey, definition, message)));
+                                        .flatMap(message -> resolveDefinitionAndProcess(streamKey, message)));
                     })
                     .subscribe(
                             v -> {},
@@ -91,6 +91,24 @@ public class StreamMaintenanceScheduler implements SmartLifecycle {
         } catch (Exception e) {
             log.error("PEL 재처리 스케줄러 오류 streamKey={} error={}", streamKey, e.getMessage());
         }
+    }
+
+    private Flux<Void> resolveDefinitionAndProcess(String streamKey,
+            org.springframework.data.redis.connection.stream.MapRecord<String, Object, Object> message) {
+        String rawPayload = String.valueOf(message.getValue().get(com.haagendazs.infrastructure.publisher.ReactiveRedisStreamEventPublisher.PAYLOAD_KEY));
+        String eventTypeCode;
+        try {
+            eventTypeCode = payloadParser.extractEventTypeCode(rawPayload);
+        } catch (Exception e) {
+            log.warn("PEL envelope 파싱 실패 id={}", message.getId());
+            return Flux.empty();
+        }
+        EventTypeDefinition def = eventTypeRegistry.getByCode(eventTypeCode).orElse(null);
+        if (def == null) {
+            log.warn("PEL 처리 불가 — 등록되지 않은 eventTypeCode={}", eventTypeCode);
+            return Flux.empty();
+        }
+        return pelMessageProcessor.process(streamKey, def, message).flux();
     }
 
     private Map<Duration, List<RecordId>> groupByBackoff(List<PendingMessage> pending) {
