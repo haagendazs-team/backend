@@ -1,7 +1,5 @@
 package com.haagendazs.member.infrastructure.kafka;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.common.event.chat.ChatChannelCreatedPayload;
 import com.haagendazs.common.event.chat.ChatChannelDeletedPayload;
 import com.haagendazs.common.event.chat.ChatChannelMemberDeletedPayload;
@@ -11,117 +9,109 @@ import com.haagendazs.common.event.chat.ChatEventTopics;
 import com.haagendazs.common.event.chat.ChatMemberDeletedPayload;
 import com.haagendazs.common.event.chat.ChatMemberUpdatedPayload;
 import com.haagendazs.common.event.chat.WorkspaceMemberJoinedPayload;
-import com.haagendazs.common.exception.InfrastructureErrorCode;
-import com.haagendazs.common.exception.InfrastructureException;
 import com.haagendazs.member.application.port.ChatEventPublisher;
 import com.haagendazs.member.domain.model.Channel;
 import com.haagendazs.member.domain.model.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 @Slf4j
-@Component
+@Service
 @RequiredArgsConstructor
 public class KafkaChatEventPublisher implements ChatEventPublisher {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Override
     public void publishWorkspaceMemberJoined(Member member, Long workspaceId) {
-        publish(
+        send(
                 ChatEventTopics.WORKSPACE_MEMBER_JOINED,
+                member.getMemberId().toString(),
                 new WorkspaceMemberJoinedPayload(
                         member.getMemberId(),
                         member.getNickname(),
                         member.getProfileImageUrl(),
                         workspaceId
-                ),
-                String.valueOf(member.getMemberId())
+                )
         );
     }
 
     @Override
     public void publishMemberUpdated(Member member) {
-        publish(
+        send(
                 ChatEventTopics.MEMBER_UPDATED,
+                member.getMemberId().toString(),
                 new ChatMemberUpdatedPayload(
                         member.getMemberId(),
                         member.getNickname(),
                         member.getProfileImageUrl()
-                ),
-                String.valueOf(member.getMemberId())
+                )
         );
     }
 
     @Override
     public void publishMemberDeleted(Member member) {
-        publish(
+        send(
                 ChatEventTopics.MEMBER_DELETED,
-                new ChatMemberDeletedPayload(member.getMemberId()),
-                String.valueOf(member.getMemberId())
+                member.getMemberId().toString(),
+                new ChatMemberDeletedPayload(member.getMemberId())
         );
     }
 
     @Override
     public void publishChannelCreated(Channel channel) {
-        publish(
+        send(
                 ChatEventTopics.CHANNEL_CREATED,
+                channel.getChannelId().toString(),
                 new ChatChannelCreatedPayload(
                         channel.getChannelId(),
                         channel.getWorkspaceId(),
                         channel.isDirectMessage() ? null : channel.getName(),
                         channel.isDirectMessage()
-                ),
-                String.valueOf(channel.getChannelId())
+                )
         );
     }
 
     @Override
     public void publishChannelUpdated(Channel channel) {
-        publish(
+        send(
                 ChatEventTopics.CHANNEL_UPDATED,
-                new ChatChannelUpdatedPayload(channel.getChannelId(), channel.getName()),
-                String.valueOf(channel.getChannelId())
+                channel.getChannelId().toString(),
+                new ChatChannelUpdatedPayload(channel.getChannelId(), channel.getName())
         );
     }
 
     @Override
     public void publishChannelDeleted(Long channelId) {
-        publish(
+        send(
                 ChatEventTopics.CHANNEL_DELETED,
-                new ChatChannelDeletedPayload(channelId),
-                String.valueOf(channelId)
+                channelId.toString(),
+                new ChatChannelDeletedPayload(channelId)
         );
     }
 
     @Override
     public void publishChannelMemberJoined(Long channelId, Long memberId) {
-        publish(
+        send(
                 ChatEventTopics.CHANNEL_MEMBER_JOINED,
-                new ChatChannelMemberJoinedPayload(channelId, memberId),
-                String.valueOf(channelId)
+                channelId.toString(),
+                new ChatChannelMemberJoinedPayload(channelId, memberId)
         );
     }
 
     @Override
     public void publishChannelMemberDeleted(Long channelId, Long memberId) {
-        publish(
+        send(
                 ChatEventTopics.CHANNEL_MEMBER_DELETED,
-                new ChatChannelMemberDeletedPayload(channelId, memberId),
-                String.valueOf(channelId)
+                channelId.toString(),
+                new ChatChannelMemberDeletedPayload(channelId, memberId)
         );
     }
 
-    private void publish(String topic, Object payload, String key) {
-        try {
-            String json = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(topic, key, json);
-            log.info("Kafka 채팅 이벤트 발행 topic={} key={}", topic, key);
-        } catch (JsonProcessingException e) {
-            throw new InfrastructureException(InfrastructureErrorCode.KAFKA_PUBLISH_FAILED, e);
-        }
+    private void send(String topic, String key, Object event) {
+        kafkaTemplate.send(topic, key, event);
+        log.info("Kafka 채팅 이벤트 발행 topic={} key={}", topic, key);
     }
 }
