@@ -63,6 +63,18 @@ class MemberServiceJunitTest {
     }
 
     @Test
+    @DisplayName("[Happy] 다른 회원 프로필 조회에 성공하면 활성 회원 정보를 반환한다")
+    void getMemberProfile_success_returnsActiveMember() {
+        Member member = TestFixture.member(2L, "example2@example.com", "encoded", "user2");
+        when(memberRepository.findById(2L)).thenReturn(Optional.of(member));
+
+        MemberResult result = memberService.getMemberProfile(2L);
+
+        assertThat(result.memberId()).isEqualTo(2L);
+        assertThat(result.nickname()).isEqualTo("user2");
+    }
+
+    @Test
     @DisplayName("[Exception] 존재하지 않는 회원 프로필 조회 시 MEMBER_NOT_FOUND 예외가 발생한다")
     void getMemberProfile_notFound_throwsException() {
         when(memberRepository.findById(99L)).thenReturn(Optional.empty());
@@ -80,6 +92,18 @@ class MemberServiceJunitTest {
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> memberService.getMyProfile(1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(MemberErrorCode.INACTIVE_MEMBER));
+    }
+
+    @Test
+    @DisplayName("[Exception] 비활성 회원 프로필 조회 시 INACTIVE_MEMBER 예외가 발생한다")
+    void getMemberProfile_inactiveMember_throwsException() {
+        Member member = TestFixture.inactiveMember(2L, "example2@example.com", "encoded", "user2");
+        when(memberRepository.findById(2L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> memberService.getMemberProfile(2L))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(MemberErrorCode.INACTIVE_MEMBER));

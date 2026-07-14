@@ -90,6 +90,32 @@ class WorkspaceApiIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("[Happy] MEMBER 권한 사용자는 워크스페이스 탈퇴에 성공한다")
+    void leaveWorkspace_member_success() throws Exception {
+        Long workspaceId = createWorkspace(ownerTokens.accessToken(), "leave-target");
+
+        mockMvc.perform(post("/workspaces/{workspaceId}/members", workspaceId)
+                        .header("Authorization", "Bearer " + ownerTokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "example2@example.com",
+                                  "role": "MEMBER"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/workspaces/{workspaceId}/members", workspaceId)
+                        .header("Authorization", "Bearer " + memberTokens.accessToken()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/workspaces/{workspaceId}", workspaceId)
+                        .header("Authorization", "Bearer " + memberTokens.accessToken()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("M008"));
+    }
+
+    @Test
     @DisplayName("[Exception] 워크스페이스 멤버가 아닌 사용자는 조회할 수 없다")
     void getWorkspace_notMember_returnsForbidden() throws Exception {
         Long workspaceId = createWorkspace(ownerTokens.accessToken(), "example");

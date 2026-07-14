@@ -128,6 +128,18 @@ class AuthServiceJunitTest {
     }
 
     @Test
+    @DisplayName("[Exception] 비활성 회원은 로그인 시 INACTIVE_MEMBER 예외가 발생한다")
+    void login_inactiveMember_throwsException() {
+        Member inactiveMember = TestFixture.inactiveMember(1L, EMAIL, "encoded-password", NICKNAME);
+        when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.of(inactiveMember));
+
+        assertThatThrownBy(() -> authService.login(EMAIL, PASSWORD))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(MemberErrorCode.INACTIVE_MEMBER));
+    }
+
+    @Test
     @DisplayName("[Exception] 비밀번호가 일치하지 않으면 INVALID_CREDENTIALS 예외가 발생한다")
     void login_wrongPassword_throwsException() {
         Member member = TestFixture.member(1L, EMAIL, "encoded-password", NICKNAME);
@@ -186,6 +198,33 @@ class AuthServiceJunitTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(MemberErrorCode.EXPIRED_REFRESH_TOKEN));
+    }
+
+    @Test
+    @DisplayName("[Exception] 재발급 시 회원이 존재하지 않으면 MEMBER_NOT_FOUND 예외가 발생한다")
+    void reissue_memberNotFound_throwsException() {
+        Token validToken = TestFixture.token(1L, 1L, "valid-token", LocalDateTime.now().plusHours(1));
+        when(tokenRepository.findByRefreshToken("valid-token")).thenReturn(Optional.of(validToken));
+        when(memberRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.reissue("valid-token"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(MemberErrorCode.MEMBER_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("[Exception] 비활성 회원은 Refresh Token 재발급 시 INACTIVE_MEMBER 예외가 발생한다")
+    void reissue_inactiveMember_throwsException() {
+        Token validToken = TestFixture.token(1L, 1L, "valid-token", LocalDateTime.now().plusHours(1));
+        Member inactiveMember = TestFixture.inactiveMember(1L, EMAIL, "encoded-password", NICKNAME);
+        when(tokenRepository.findByRefreshToken("valid-token")).thenReturn(Optional.of(validToken));
+        when(memberRepository.findById(1L)).thenReturn(Optional.of(inactiveMember));
+
+        assertThatThrownBy(() -> authService.reissue("valid-token"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(MemberErrorCode.INACTIVE_MEMBER));
     }
 
     @Test

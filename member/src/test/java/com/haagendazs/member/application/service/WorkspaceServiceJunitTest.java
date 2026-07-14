@@ -95,6 +95,34 @@ class WorkspaceServiceJunitTest {
     }
 
     @Test
+    @DisplayName("[Happy] 워크스페이스 조회에 성공하면 워크스페이스 정보를 반환한다")
+    void getWorkspace_success_returnsWorkspace() {
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L))
+                .thenReturn(Optional.of(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER)));
+
+        WorkspaceResult result = workspaceService.getWorkspace(1L, 1L);
+
+        assertThat(result.workspaceId()).isEqualTo(1L);
+        assertThat(result.name()).isEqualTo(WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("[Happy] ADMIN은 워크스페이스 정보 수정에 성공한다")
+    void updateWorkspace_admin_success_returnsUpdatedWorkspace() {
+        Workspace workspace = TestFixture.workspace(1L, WORKSPACE_NAME);
+        WorkspaceMember admin = TestFixture.workspaceMember(1L, 2L, WorkspaceRole.ADMIN);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(workspace));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.of(admin));
+        when(workspaceRepository.save(any(Workspace.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        WorkspaceResult result = workspaceService.updateWorkspace(2L, 1L, "example2", "https://icon.example.com/icon.png");
+
+        assertThat(result.name()).isEqualTo("example2");
+        assertThat(result.iconUrl()).isEqualTo("https://icon.example.com/icon.png");
+    }
+
+    @Test
     @DisplayName("[Exception] 워크스페이스 멤버가 아니면 조회 시 NOT_WORKSPACE_MEMBER 예외가 발생한다")
     void getWorkspace_notMember_throwsException() {
         when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
@@ -205,6 +233,48 @@ class WorkspaceServiceJunitTest {
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo(WORKSPACE_NAME);
+    }
+
+    @Test
+    @DisplayName("[Exception] OWNER는 워크스페이스 탈퇴 시 INSUFFICIENT_PERMISSION 예외가 발생한다")
+    void leaveWorkspace_owner_throwsInsufficientPermission() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+
+        assertThatThrownBy(() -> workspaceService.leaveWorkspace(1L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.INSUFFICIENT_PERMISSION);
+    }
+
+    @Test
+    @DisplayName("[Exception] 존재하지 않는 이메일로 초대하면 MEMBER_NOT_FOUND 예외가 발생한다")
+    void inviteMember_unknownEmail_throwsException() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        when(memberRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> workspaceService.inviteMember(1L, 1L, "unknown@example.com", "MEMBER"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.MEMBER_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("[Exception] 자기 자신을 초대하면 CANNOT_INVITE_SELF 예외가 발생한다")
+    void inviteMember_self_throwsException() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        Member ownerMember = TestFixture.member(1L, "example@example.com", "encoded", "user");
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        when(memberRepository.findByEmail("example@example.com")).thenReturn(Optional.of(ownerMember));
+
+        assertThatThrownBy(() -> workspaceService.inviteMember(1L, 1L, "example@example.com", "MEMBER"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.CANNOT_INVITE_SELF);
     }
 
     @Test

@@ -26,6 +26,43 @@ class ChannelApiIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("[Happy] 채널에 참여하지 않은 멤버는 빈 채널 목록을 조회한다")
+    void getMyChannelsInWorkspace_noChannels_returnsEmptyList() throws Exception {
+        mockMvc.perform(get("/workspaces/{workspaceId}/channels", workspaceId)
+                        .header("Authorization", "Bearer " + memberTokens.accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("[Happy] 채널 삭제에 성공하면 채널과 멤버 정보가 함께 삭제된다")
+    void deleteChannel_success() throws Exception {
+        String createChannelResponse = mockMvc.perform(post("/workspaces/{workspaceId}/channels", workspaceId)
+                        .header("Authorization", "Bearer " + ownerTokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "delete-target"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Long channelId = objectMapper.readTree(createChannelResponse).get("data").get("channelId").asLong();
+
+        mockMvc.perform(delete("/channels/{channelId}", channelId)
+                        .header("Authorization", "Bearer " + ownerTokens.accessToken()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/channels/{channelId}", channelId)
+                        .header("Authorization", "Bearer " + ownerTokens.accessToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("M011"));
+    }
+
+    @Test
     @DisplayName("[Happy] 채널 생성, 조회, 수정, 멤버 조회, 나가기 흐름이 정상 동작한다")
     void channelFlow_success() throws Exception {
         String createChannelResponse = mockMvc.perform(post("/workspaces/{workspaceId}/channels", workspaceId)

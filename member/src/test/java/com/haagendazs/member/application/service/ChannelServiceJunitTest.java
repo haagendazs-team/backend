@@ -94,6 +94,72 @@ class ChannelServiceJunitTest {
     }
 
     @Test
+    @DisplayName("[Happy] 채널 조회에 성공하면 채널 정보를 반환한다")
+    void getChannel_success_returnsChannel() {
+        Channel channel = TestFixture.channel(10L, 1L, CHANNEL_NAME, false);
+        when(channelRepository.findById(10L)).thenReturn(Optional.of(channel));
+        when(channelMemberRepository.existsByChannelIdAndMemberId(10L, 1L)).thenReturn(true);
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
+
+        ChannelResult result = channelService.getChannel(1L, 10L);
+
+        assertThat(result.channelId()).isEqualTo(10L);
+        assertThat(result.name()).isEqualTo(CHANNEL_NAME);
+    }
+
+    @Test
+    @DisplayName("[Exception] 존재하지 않는 채널 조회 시 CHANNEL_NOT_FOUND 예외가 발생한다")
+    void getChannel_notFound_throwsException() {
+        when(channelRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> channelService.getChannel(1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.CHANNEL_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("[Happy] 채널 이름 수정에 성공하면 변경된 이름을 반환한다")
+    void updateChannel_success_returnsUpdatedChannel() {
+        Channel channel = TestFixture.channel(10L, 1L, CHANNEL_NAME, false);
+        when(channelRepository.findById(10L)).thenReturn(Optional.of(channel));
+        when(channelMemberRepository.existsByChannelIdAndMemberId(10L, 1L)).thenReturn(true);
+        when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
+
+        ChannelResult result = channelService.updateChannel(1L, 10L, "random");
+
+        assertThat(result.name()).isEqualTo("random");
+        verify(searchIndexEventPublisher).publishChannelRenamed(any(Channel.class));
+        verify(chatEventPublisher).publishChannelUpdated(any(Channel.class));
+    }
+
+    @Test
+    @DisplayName("[Happy] 채널 삭제에 성공하면 채널과 멤버 정보를 삭제한다")
+    void deleteChannel_success_deletesChannel() {
+        Channel channel = TestFixture.channel(10L, 1L, CHANNEL_NAME, false);
+        when(channelRepository.findById(10L)).thenReturn(Optional.of(channel));
+        when(channelMemberRepository.existsByChannelIdAndMemberId(10L, 1L)).thenReturn(true);
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
+
+        channelService.deleteChannel(1L, 10L);
+
+        verify(channelMemberRepository).deleteAllByChannelId(10L);
+        verify(channelRepository).delete(channel);
+        verify(searchIndexEventPublisher).publishChannelDeleted(10L);
+        verify(chatEventPublisher).publishChannelDeleted(10L);
+    }
+
+    @Test
     @DisplayName("[Exception] 채널 멤버가 아니면 채널 조회 시 NOT_CHANNEL_MEMBER 예외가 발생한다")
     void getChannel_notMember_throwsException() {
         Channel channel = TestFixture.channel(10L, 1L, CHANNEL_NAME, false);
@@ -198,5 +264,29 @@ class ChannelServiceJunitTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(MemberErrorCode.CANNOT_INVITE_SELF);
+    }
+
+    @Test
+    @DisplayName("[Exception] 워크스페이스에 없는 멤버와 DM 생성 시 TARGET_MEMBER_NOT_IN_WORKSPACE 예외가 발생한다")
+    void getOrCreateDmChannel_targetNotInWorkspace_throwsException() {
+        when(workspaceService.validateWorkspaceMember(1L, 1L))
+                .thenReturn(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> channelService.getOrCreateDmChannel(1L, 1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.TARGET_MEMBER_NOT_IN_WORKSPACE);
+    }
+
+    @Test
+    @DisplayName("[Exception] 채널 멤버가 아니면 채널 나가기 시 NOT_CHANNEL_MEMBER 예외가 발생한다")
+    void leaveChannel_notMember_throwsException() {
+        when(channelMemberRepository.existsByChannelIdAndMemberId(10L, 2L)).thenReturn(false);
+
+        assertThatThrownBy(() -> channelService.leaveChannel(2L, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.NOT_CHANNEL_MEMBER);
     }
 }
