@@ -35,7 +35,8 @@ public class TossBillingClient {
             String customerKey,
             String orderId, //주문번호
             Long amount,
-            String orderName
+            String orderName,
+            String idempotencyKey
     ) {
         TossBillingPaymentRequest request = new TossBillingPaymentRequest(
                 customerKey,
@@ -46,6 +47,7 @@ public class TossBillingClient {
 
         return restClient.post()
                 .uri("/v1/billing/{billingKey}", billingKey)
+                .header("Idempotency-Key", idempotencyKey)
                 .body(request)
                 .retrieve()
                 .body(TossBillingPaymentResponse.class);

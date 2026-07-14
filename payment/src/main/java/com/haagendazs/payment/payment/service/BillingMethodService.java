@@ -29,6 +29,7 @@ public class BillingMethodService {
     private final BillingRepository billingRepository;
     private final TossBillingClient tossBillingClient;
 
+    // 프론트에서 requestBillingAuth를 호출할 때 사용할 customerKey를 준비합니다.
     @Transactional
     public BillingMethodPrepareResponse prepareRegistration(Long memberId) {
         String customerKey = paymentCustomerKeyService.getOrCreateCustomerKey(memberId);
@@ -36,10 +37,11 @@ public class BillingMethodService {
         return new BillingMethodPrepareResponse(customerKey);
     }
 
+    // authKey로 Toss billingKey를 발급하고 결제수단을 저장합니다. customerKey는 클라이언트 값 대신 DB에서 조회합니다.
     @Transactional
-    public void issueBillingMethod(Long memberId, BillingMethodIssueRequest request) {
+    public Billing issueBillingMethod(Long memberId, BillingMethodIssueRequest request) {
         validateBillingMethodLimit(memberId);
-        String customerKey = validateCustomerKey(memberId, request.customerKey());
+        String customerKey = paymentCustomerKeyService.getCustomerKey(memberId);
 
         TossBillingKeyIssueResponse tossResponse =
                 tossBillingClient.issueBillingKey(
@@ -47,9 +49,10 @@ public class BillingMethodService {
                         customerKey
                 );
 
-        saveBilling(memberId, tossResponse, shouldRegisterAsDefault(memberId));
+        return saveBilling(memberId, tossResponse, shouldRegisterAsDefault(memberId));
     }
 
+    // Toss billingKey를 삭제한 뒤 로컬 결제수단을 비활성화합니다.
     @Transactional
     public void deleteBillingMethod(Long memberId, Long billingId) {
         Billing billing = billingRepository.findByIdAndMemberIdAndBillingStatus(
@@ -81,16 +84,7 @@ public class BillingMethodService {
         }
     }
 
-    private String validateCustomerKey(Long memberId, String requestCustomerKey) {
-        String savedCustomerKey = paymentCustomerKeyService.getCustomerKey(memberId);
-
-        if (!savedCustomerKey.equals(requestCustomerKey)) {
-            throw new BusinessException(PaymentErrorCode.INVALID_CUSTOMER_KEY);
-        }
-
-        return savedCustomerKey;
-    }
-
+    // 활성 결제수단이 하나만 남으면 기본 결제수단으로 보정합니다.
     @Transactional
     public void ensureSingleActiveBillingMethodIsDefault(Long memberId) {
         List<Billing> activeBillingMethods =

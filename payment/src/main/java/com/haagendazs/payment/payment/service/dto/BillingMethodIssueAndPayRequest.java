@@ -2,8 +2,10 @@ package com.haagendazs.payment.payment.service.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public record BillingMethodIssueRequest(
+public record BillingMethodIssueAndPayRequest(
         @NotBlank
-        String authKey
+        String authKey,
+        @NotBlank
+        String orderNo
 ) {
 }

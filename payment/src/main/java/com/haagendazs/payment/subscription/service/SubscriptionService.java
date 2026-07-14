@@ -10,7 +10,6 @@ import com.haagendazs.payment.order.entity.Orders;
 import com.haagendazs.payment.order.service.OrderService;
 import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
 import com.haagendazs.payment.payment.entity.Billing;
-import com.haagendazs.payment.payment.entity.Payments;
 import com.haagendazs.payment.product.entity.Products;
 import com.haagendazs.payment.product.enums.ProductStatus;
 import com.haagendazs.payment.product.enums.ProductType;
@@ -107,8 +106,7 @@ public class SubscriptionService {
     //최초 구독 결제시 구독플랜 설정
     public Void activateSubscriptionByPayment(
             Orders orders,
-            Billing billing,
-            Payments payments
+            Billing billing
     ){
         // 1. 주문 객체에서 구독 상품의 ID를 추출
         Long subscriptionProductId = orders.getSubscriptionProductId();

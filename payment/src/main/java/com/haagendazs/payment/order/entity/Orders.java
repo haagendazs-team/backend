@@ -75,6 +75,18 @@ public class Orders extends BaseEntity {
         this.orderStatus = OrderStatus.PAID;
     }
 
+    public void markProcessing() {
+        this.orderStatus = OrderStatus.PROCESSING;
+    }
+
+    public void fail() {
+        this.orderStatus = OrderStatus.FAILED;
+    }
+
+    public void markReconcileRequired() {
+        this.orderStatus = OrderStatus.RECONCILE_REQUIRED;
+    }
+
     //구독상품의 상품 id 추출
     public Long getSubscriptionProductId() {
         return this.orderItems.stream()

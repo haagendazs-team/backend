@@ -151,7 +151,7 @@ public class SubscriptionServiceTest {
         Billing billing = billing(100L, 3L);
         Orders order = subscriptionOrder(3L, workspaceId, 2L);
 
-        subscriptionService.activateSubscriptionByPayment(order, billing, null);
+        subscriptionService.activateSubscriptionByPayment(order, billing);
 
         Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
         assertThat(subscription.getSubscriptionPlanId()).isEqualTo(2L);
@@ -187,7 +187,7 @@ public class SubscriptionServiceTest {
                 .build();
         subscriptionsRepository.saveAndFlush(existingSubscription);
 
-        subscriptionService.activateSubscriptionByPayment(order, billing, null);
+        subscriptionService.activateSubscriptionByPayment(order, billing);
 
         Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
         assertThat(subscription.getId()).isEqualTo(existingSubscription.getId());
@@ -219,7 +219,7 @@ public class SubscriptionServiceTest {
                 .build();
         subscriptionsRepository.saveAndFlush(existingSubscription);
 
-        assertThatThrownBy(() -> subscriptionService.activateSubscriptionByPayment(order, billing, null))
+        assertThatThrownBy(() -> subscriptionService.activateSubscriptionByPayment(order, billing))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(PaymentErrorCode.INVALID_SUBSCRIPTION_CHANGE);

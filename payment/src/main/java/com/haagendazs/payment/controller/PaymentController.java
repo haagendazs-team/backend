@@ -1,8 +1,10 @@
 package com.haagendazs.payment.controller;
 
 import com.haagendazs.common.response.ApiResponse;
+import com.haagendazs.payment.payment.service.BillingCheckoutService;
 import com.haagendazs.payment.payment.service.BillingMethodService;
 import com.haagendazs.payment.payment.service.BillingPaymentService;
+import com.haagendazs.payment.payment.service.dto.BillingMethodIssueAndPayRequest;
 import com.haagendazs.payment.payment.service.dto.BillingMethodIssueRequest;
 import com.haagendazs.payment.payment.service.dto.BillingMethodPrepareResponse;
 import com.haagendazs.payment.payment.service.dto.BillingPaymentRequest;
@@ -23,6 +25,7 @@ public class PaymentController {
 
     private final BillingMethodService billingMethodService;
     private final BillingPaymentService billingPaymentService;
+    private final BillingCheckoutService billingCheckoutService;
 
     //자동결제 결제수단 등록 준비
     @PostMapping("/billing-methods/prepare")
@@ -36,7 +39,7 @@ public class PaymentController {
         return ApiResponse.ok(response);
     }
 
-    //자동결제 결제수단 빌링키 발급
+    //자동결제 결제수단만 등록합니다. 마이페이지 등 주문 결제와 분리된 등록 흐름에서 사용합니다.
     @PostMapping("/billing-methods/confirm")
     public ApiResponse<Void> issueBillingMethod(
             @RequestHeader("X-Member-Id")
@@ -45,6 +48,18 @@ public class PaymentController {
             BillingMethodIssueRequest request
     ) {
         billingMethodService.issueBillingMethod(memberId, request);
+        return ApiResponse.ok();
+    }
+
+    //주문 중 자동결제 결제수단을 등록한 뒤, 같은 요청에서 해당 주문까지 결제합니다.
+    @PostMapping("/billing-methods/confirm-and-pay")
+    public ApiResponse<Void> issueBillingMethodAndPay(
+            @RequestHeader("X-Member-Id")
+            Long memberId,
+            @RequestBody @Valid
+            BillingMethodIssueAndPayRequest request
+    ) {
+        billingCheckoutService.issueBillingMethodAndPay(memberId, request);
         return ApiResponse.ok();
     }
 
@@ -60,7 +75,7 @@ public class PaymentController {
         return ApiResponse.ok();
     }
 
-    //등록된 자동결제 결제수단으로 결제
+    //이미 등록된 기본 자동결제 결제수단으로 주문을 결제합니다.
     @PostMapping("/billing")
     public ApiResponse<Void> payWithRegisteredBillingMethod(
             @RequestHeader("X-Member-Id")

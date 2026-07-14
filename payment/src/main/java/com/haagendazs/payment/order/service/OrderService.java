@@ -52,7 +52,7 @@ public class OrderService {
             orderType = OrderType.Normal;
         }
 
-        String customerKey = null;
+        String customerKey = null;//프론트에서 자동결제 등록을 할 때 사용함.
 
         if (orderType == OrderType.Billing) {
             customerKey = paymentCustomerKeyService.getOrCreateCustomerKey(memberId);
