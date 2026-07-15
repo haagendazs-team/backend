@@ -23,6 +23,6 @@ public class BillingCheckoutService {
                 new BillingMethodIssueRequest(request.authKey())
         );
 
-        billingPaymentService.payWithBillingMethod(memberId, request.orderNo(), billing);
+        billingPaymentService.payCheckoutWithBillingMethod(memberId, request.orderNo(), billing);
     }
 }

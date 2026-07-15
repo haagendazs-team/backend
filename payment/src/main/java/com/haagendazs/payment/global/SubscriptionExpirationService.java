@@ -37,7 +37,6 @@ public class SubscriptionExpirationService {
     public void expirePaidSubscriptions() {
         LocalDateTime now = LocalDateTime.now();
         applyScheduledPlanChanges(now);
-        expireSubscriptionsWithoutScheduledChange(now);
     }
 
     private void applyScheduledPlanChanges(LocalDateTime now) {

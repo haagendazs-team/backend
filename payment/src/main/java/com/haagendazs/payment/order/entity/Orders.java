@@ -17,7 +17,15 @@ import java.util.List;
 import lombok.*;
 
 @Entity
-@Table(name = "orders")
+@Table(
+        name = "orders",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_orders_member_workspace_idempotency",
+                        columnNames = {"member_id", "workspace_id", "idempotency_key"}
+                )
+        }
+)
 @Getter
 @Builder
 @AllArgsConstructor
@@ -39,6 +47,10 @@ public class Orders extends BaseEntity {
     //주문번호
     @Column(nullable = false, unique = true)
     private String orderNo;
+
+    //주문 생성 멱등키. 같은 checkout 시도에서 중복 주문 생성을 막기 위해 사용합니다.
+    @Column(name = "idempotency_key", length = 300)
+    private String idempotencyKey;
 
     //주문상품목록
     @Builder.Default
@@ -77,6 +89,10 @@ public class Orders extends BaseEntity {
 
     public void markProcessing() {
         this.orderStatus = OrderStatus.PROCESSING;
+    }
+
+    public void markRetryScheduled() {
+        this.orderStatus = OrderStatus.RETRY_SCHEDULED;
     }
 
     public void fail() {

@@ -6,6 +6,7 @@ import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionRequest
 import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetsubscriptionPeriodsResponse;
+import com.haagendazs.payment.subscription.service.dto.ScheduledPlanChangeResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -51,6 +52,28 @@ public class SubscriptionController {
                 subscriptionService.changeSubscription(memberId, workspaceId, changeSubscriptionRequest);
 
         return ApiResponse.ok(response);
+    }
+
+    //워크스페이스의 예약된 구독 플랜 변경 조회
+    @GetMapping("/plan-change")
+    public ApiResponse<ScheduledPlanChangeResponse> getScheduledPlanChange(
+            @PathVariable
+            Long workspaceId
+    ) {
+        return ApiResponse.ok(subscriptionService.getScheduledPlanChange(workspaceId));
+    }
+
+    //워크스페이스의 예약된 구독 플랜 변경 취소
+    @DeleteMapping("/plan-change")
+    public ApiResponse<Void> cancelScheduledPlanChange(
+            @RequestHeader("X-Member-Id")
+            Long memberId,
+            @PathVariable
+            Long workspaceId
+    ) {
+        subscriptionService.cancelScheduledPlanChange(memberId, workspaceId);
+
+        return ApiResponse.ok();
     }
 
 }

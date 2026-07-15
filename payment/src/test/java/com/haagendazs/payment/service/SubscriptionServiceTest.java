@@ -13,6 +13,10 @@ import com.haagendazs.payment.order.service.OrderService;
 import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
 import com.haagendazs.payment.payment.entity.Billing;
 import com.haagendazs.payment.payment.enums.BillingStatus;
+import com.haagendazs.payment.payment.repository.BillingRepository;
+import com.haagendazs.payment.payment.service.BillingPaymentService;
+import com.haagendazs.payment.payment.service.PaymentRetryJobService;
+import com.haagendazs.payment.payment.service.tools.TossPaymentException;
 import com.haagendazs.payment.product.entity.OrderItems;
 import com.haagendazs.payment.product.entity.Products;
 import com.haagendazs.payment.product.enums.ProductStatus;
@@ -21,6 +25,7 @@ import com.haagendazs.payment.product.repository.ProductsRepository;
 import com.haagendazs.payment.subscription.entity.SubscriptionPeriods;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
 import com.haagendazs.payment.subscription.enums.PlanType;
+import com.haagendazs.payment.subscription.entity.SubscriptionScheduledChanges;
 import com.haagendazs.payment.subscription.enums.SubscriptionChangeAction;
 import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
 import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
@@ -29,11 +34,13 @@ import com.haagendazs.payment.subscription.repository.SubscriptionPeriodsReposit
 import com.haagendazs.payment.subscription.repository.SubscriptionPlanRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
+import com.haagendazs.payment.subscription.service.SubscriptionRenewalService;
 import com.haagendazs.payment.subscription.service.SubscriptionService;
 import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionRequest;
 import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetSubscriptionResponse;
 import com.haagendazs.payment.subscription.service.dto.GetsubscriptionPeriodsResponse;
+import com.haagendazs.payment.subscription.service.dto.ScheduledPlanChangeResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,6 +58,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +70,9 @@ public class SubscriptionServiceTest {
 
     @Autowired
     private SubscriptionService subscriptionService;
+
+    @Autowired
+    private SubscriptionRenewalService subscriptionRenewalService;
 
     @Autowired
     private SubscriptionsRepository subscriptionsRepository;
@@ -78,11 +89,20 @@ public class SubscriptionServiceTest {
     @Autowired
     private ProductsRepository productsRepository;
 
+    @Autowired
+    private BillingRepository billingRepository;
+
     @MockitoBean
     private PaymentEventProducer paymentEventProducer;
 
     @MockitoBean
     private OrderService orderService;
+
+    @MockitoBean
+    private BillingPaymentService billingPaymentService;
+
+    @MockitoBean
+    private PaymentRetryJobService paymentRetryJobService;
 
     @Test
     @DisplayName("워크스페이스 생성시 구독플랜 설정 - succes")
@@ -261,6 +281,267 @@ public class SubscriptionServiceTest {
                 .memberId(memberId)
                 .billingStatus(BillingStatus.ACTIVE)
                 .build();
+    }
+
+    private Billing saveActiveBilling(Long memberId) {
+        return billingRepository.saveAndFlush(Billing.builder()
+                .memberId(memberId)
+                .billingKey("billing-key-" + memberId)
+                .billingStatus(BillingStatus.ACTIVE)
+                .isDefault(true)
+                .build());
+    }
+
+    private OrderCreateResponse orderResponse(Long orderId, String orderNo) {
+        return new OrderCreateResponse(
+                orderId,
+                orderNo,
+                "Plus Subscription",
+                19900L,
+                OrderType.Billing,
+                "customer-key"
+        );
+    }
+
+    private TossPaymentException tossException(String tossCode) {
+        return new TossPaymentException(
+                HttpStatus.GATEWAY_TIMEOUT,
+                tossCode,
+                tossCode
+        );
+    }
+
+    @Test
+    @DisplayName("정기 자동결제 성공 후 구독 갱신")
+    void renewSubscriptionByPaymentTest() {
+        Long workspaceId = 13L;
+        Billing billing = billing(103L, 6L);
+        Orders order = subscriptionOrder(6L, workspaceId, 2L);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.RENEWAL_PENDING)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .billingId(billing.getId())
+                .build());
+
+        subscriptionService.renewSubscriptionByPayment(order, billing);
+
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
+        assertThat(subscription.getSubscriptionPlanId()).isEqualTo(2L);
+        assertThat(subscription.getBillingId()).isEqualTo(billing.getId());
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(subscription.getCurrentPeriodEnd()).isAfter(subscription.getCurrentPeriodStart());
+
+        assertThat(subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(workspaceId))
+                .singleElement()
+                .satisfies(period -> {
+                    assertThat(period.getPlanId()).isEqualTo(2L);
+                    assertThat(period.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+                });
+        verify(paymentEventProducer).publishSubscriptionChanged(any(SubscriptionChangedEvent.class));
+        verify(paymentEventProducer).publishWorkspaceSubscribed(any(WorkspaceSubscribedEvent.class));
+    }
+
+    @Test
+    @DisplayName("결제 없는 플랜의 구독 기간 갱신")
+    void renewSubscriptionPeriodTest() {
+        Long workspaceId = 14L;
+        LocalDateTime periodStart = LocalDateTime.now();
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(365))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .build());
+
+        subscriptionService.renewSubscriptionPeriod(workspaceId, 1L, null, periodStart);
+
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
+        assertThat(subscription.getSubscriptionPlanId()).isEqualTo(1L);
+        assertThat(subscription.getBillingId()).isNull();
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(subscription.getCurrentPeriodStart()).isEqualTo(periodStart);
+        assertThat(subscription.getCurrentPeriodEnd()).isEqualTo(periodStart.plusDays(365));
+
+        assertThat(subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(workspaceId))
+                .singleElement()
+                .extracting(SubscriptionPeriods::getPlanId)
+                .isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("구독 상태 변경 - 갱신 대기")
+    void markRenewalPendingTest() {
+        Long workspaceId = 15L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .build());
+
+        subscriptionService.markRenewalPending(workspaceId);
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+    }
+
+    @Test
+    @DisplayName("구독 상태 변경 - 결제 유예")
+    void markPastDueTest() {
+        Long workspaceId = 16L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.RENEWAL_PENDING)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .build());
+
+        subscriptionService.markPastDue(workspaceId);
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+    }
+
+    @Test
+    @DisplayName("구독 상태 변경 - 만료")
+    void expireSubscriptionTest() {
+        Long workspaceId = 17L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.PAST_DUE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .build());
+
+        subscriptionService.expireSubscription(workspaceId);
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("갱신 대상 STANDARD 구독 - 결제 없이 기간 갱신")
+    void renewDueStandardSubscriptionsTest() {
+        Long workspaceId = 18L;
+        LocalDateTime previousPeriodEnd = LocalDateTime.now().minusDays(1);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(366))
+                .currentPeriodEnd(previousPeriodEnd)
+                .build());
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
+        assertThat(subscription.getSubscriptionPlanId()).isEqualTo(1L);
+        assertThat(subscription.getBillingId()).isNull();
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(subscription.getCurrentPeriodEnd()).isAfter(previousPeriodEnd);
+        assertThat(subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(workspaceId))
+                .singleElement()
+                .extracting(SubscriptionPeriods::getPlanId)
+                .isEqualTo(1L);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 대상 유료 구독 - 주문 생성 후 자동결제 요청")
+    void renewDuePaidSubscriptionsTest() {
+        Long memberId = 19L;
+        Long workspaceId = 19L;
+        Billing billing = saveActiveBilling(memberId);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .billingId(billing.getId())
+                .build());
+        OrderCreateResponse order = orderResponse(1900L, "ORDER-1900");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenReturn(order);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+        verify(orderService).createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L);
+        verify(billingPaymentService).paySubscriptionRenewalWithBillingMethod(
+                memberId,
+                order.orderNo(),
+                billing
+        );
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 자동결제 일시 실패 - 재시도 예약")
+    void renewDuePaidSubscriptionsRetryLaterTest() {
+        Long memberId = 23L;
+        Long workspaceId = 23L;
+        Billing billing = saveActiveBilling(memberId);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .billingId(billing.getId())
+                .build());
+        OrderCreateResponse order = orderResponse(2300L, "ORDER-2300");
+        TossPaymentException exception = tossException("TOSS_CONNECT_TIMEOUT");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenReturn(order);
+        org.mockito.Mockito.doThrow(exception)
+                .when(billingPaymentService)
+                .paySubscriptionRenewalWithBillingMethod(memberId, order.orderNo(), billing);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        verify(paymentRetryJobService).scheduleRetry(
+                memberId,
+                order.orderNo(),
+                billing.getId(),
+                exception
+        );
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 자동결제 확정 실패 - 결제 유예 상태 전환")
+    void renewDuePaidSubscriptionsFailAndNotifyTest() {
+        Long memberId = 24L;
+        Long workspaceId = 24L;
+        Billing billing = saveActiveBilling(memberId);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(2L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .billingId(billing.getId())
+                .build());
+        OrderCreateResponse order = orderResponse(2400L, "ORDER-2400");
+        TossPaymentException exception = tossException("REJECT_CARD_PAYMENT");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenReturn(order);
+        org.mockito.Mockito.doThrow(exception)
+                .when(billingPaymentService)
+                .paySubscriptionRenewalWithBillingMethod(memberId, order.orderNo(), billing);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        verify(paymentRetryJobService, never()).scheduleRetry(any(), any(), any(), any());
     }
 
     //getWorkspaceSubscription 메서드 테스트
@@ -448,6 +729,141 @@ public class SubscriptionServiceTest {
                     assertThat(scheduledChange.getScheduledAt()).isEqualTo(periodEnd);
                 });
         verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 예약 조회 - 예약 있음")
+    void getScheduledPlanChangeTest(){
+        Long workspaceId = 412L;
+        Long memberId = 412L;
+        LocalDateTime periodEnd = LocalDateTime.now().plusDays(10);
+        Subscriptions subscription = subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(periodEnd)
+                .build());
+        subscriptionScheduledChangesRepository.saveAndFlush(SubscriptionScheduledChanges.builder()
+                .memberId(memberId)
+                .subscriptionId(subscription.getId())
+                .requestedPlanId(2L)
+                .changeType(SubscriptionChangeType.PLAN_CHANGE)
+                .changeStatus(SubscriptionChangeStatus.SCHEDULED)
+                .requestedAt(LocalDateTime.now().minusDays(1))
+                .scheduledAt(periodEnd)
+                .build());
+
+        ScheduledPlanChangeResponse response = subscriptionService.getScheduledPlanChange(workspaceId);
+
+        assertThat(response.exists()).isTrue();
+        assertThat(response.currentPlanId()).isEqualTo(3L);
+        assertThat(response.currentPlanType()).isEqualTo(PlanType.PRO);
+        assertThat(response.requestedPlanId()).isEqualTo(2L);
+        assertThat(response.requestedPlanType()).isEqualTo(PlanType.PLUS);
+        assertThat(response.scheduledAt()).isEqualTo(periodEnd);
+        assertThat(response.cancelable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 예약 조회 - 예약 없음")
+    void getScheduledPlanChangeNoneTest(){
+        Long workspaceId = 413L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(10))
+                .build());
+
+        ScheduledPlanChangeResponse response = subscriptionService.getScheduledPlanChange(workspaceId);
+
+        assertThat(response.exists()).isFalse();
+        assertThat(response.currentPlanId()).isEqualTo(3L);
+        assertThat(response.currentPlanType()).isEqualTo(PlanType.PRO);
+        assertThat(response.requestedPlanId()).isNull();
+        assertThat(response.scheduledAt()).isNull();
+        assertThat(response.cancelable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 - 기존 예약이 있으면 추가 예약 불가")
+    void changeSubscriptionDuplicateScheduleTest(){
+        Long workspaceId = 414L;
+        Long memberId = 414L;
+        Subscriptions subscription = subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(10))
+                .build());
+        subscriptionScheduledChangesRepository.saveAndFlush(SubscriptionScheduledChanges.builder()
+                .memberId(memberId)
+                .subscriptionId(subscription.getId())
+                .requestedPlanId(2L)
+                .changeType(SubscriptionChangeType.PLAN_CHANGE)
+                .changeStatus(SubscriptionChangeStatus.SCHEDULED)
+                .requestedAt(LocalDateTime.now().minusDays(1))
+                .scheduledAt(subscription.getCurrentPeriodEnd())
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.changeSubscription(memberId, workspaceId, new ChangeSubscriptionRequest(2L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.SUBSCRIPTION_SCHEDULED_CHANGE_ALREADY_EXISTS);
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 예약 취소 - 성공")
+    void cancelScheduledPlanChangeTest(){
+        Long workspaceId = 410L;
+        Long memberId = 410L;
+        Subscriptions subscription = subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(10))
+                .build());
+        subscriptionScheduledChangesRepository.saveAndFlush(SubscriptionScheduledChanges.builder()
+                .memberId(memberId)
+                .subscriptionId(subscription.getId())
+                .requestedPlanId(2L)
+                .changeType(SubscriptionChangeType.PLAN_CHANGE)
+                .changeStatus(SubscriptionChangeStatus.SCHEDULED)
+                .requestedAt(LocalDateTime.now().minusDays(1))
+                .scheduledAt(subscription.getCurrentPeriodEnd())
+                .build());
+
+        subscriptionService.cancelScheduledPlanChange(memberId, workspaceId);
+
+        assertThat(subscriptionScheduledChangesRepository.findAll())
+                .singleElement()
+                .satisfies(scheduledChange -> {
+                    assertThat(scheduledChange.getChangeStatus()).isEqualTo(SubscriptionChangeStatus.CANCELED);
+                    assertThat(scheduledChange.getCanceledAt()).isNotNull();
+                });
+    }
+
+    @Test
+    @DisplayName("워크스페이스 구독 변경 예약 취소 - 예약 없음")
+    void cancelScheduledPlanChangeNotFoundTest(){
+        Long workspaceId = 411L;
+        Long memberId = 411L;
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(3L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(20))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(10))
+                .build());
+
+        assertThatThrownBy(() -> subscriptionService.cancelScheduledPlanChange(memberId, workspaceId))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.SUBSCRIPTION_SCHEDULED_CHANGE_NOT_FOUND);
     }
 
     @Test

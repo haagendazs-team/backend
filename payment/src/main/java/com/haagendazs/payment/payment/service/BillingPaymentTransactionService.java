@@ -81,6 +81,22 @@ public class BillingPaymentTransactionService {
         publishPaymentCompleted(memberId, order, payment);
     }
 
+    // 정기 자동결제 성공 응답을 로컬 결제/주문/구독 갱신 상태에 반영합니다.
+    @Transactional
+    public void completeSubscriptionRenewalPayment(
+            Long memberId,
+            BillingPaymentPreparation preparation,
+            TossBillingPaymentResponse response
+    ) {
+        Orders order = getProcessingOrder(memberId, preparation.orderNo());
+        Billing billing = getActiveBilling(memberId, preparation.billingId());
+        Payments payment = savePayment(order, response);
+
+        order.complete();
+        subscriptionService.renewSubscriptionByPayment(order, billing);
+        publishPaymentCompleted(memberId, order, payment);
+    }
+
     // PG 결제 실패 또는 PG 호출 실패를 로컬 주문 실패 상태로 반영합니다.
     @Transactional
     public void failBillingPayment(
@@ -91,6 +107,19 @@ public class BillingPaymentTransactionService {
         Orders order = getProcessingOrder(memberId, preparation.orderNo());
 
         order.fail();
+        publishPaymentFailed(memberId, preparation.orderNo(), order, exception);
+    }
+
+    // 정기 자동결제 일시 실패를 재시도 예약 상태로 남깁니다.
+    @Transactional
+    public void markRetryScheduled(
+            Long memberId,
+            BillingPaymentPreparation preparation,
+            RuntimeException exception
+    ) {
+        Orders order = getProcessingOrder(memberId, preparation.orderNo());
+
+        order.markRetryScheduled();
         publishPaymentFailed(memberId, preparation.orderNo(), order, exception);
     }
 
@@ -114,7 +143,8 @@ public class BillingPaymentTransactionService {
         if (!order.getMemberId().equals(memberId)) {
             throw new BusinessException(PaymentErrorCode.ORDER_ACCESS_DENIED);
         }
-        if (order.getOrderStatus() != OrderStatus.PENDING) {
+        if (order.getOrderStatus() != OrderStatus.PENDING
+                && order.getOrderStatus() != OrderStatus.RETRY_SCHEDULED) {
             throw new BusinessException(PaymentErrorCode.INVALID_ORDER_STATUS);
         }
         if (order.getOrderType() != OrderType.Billing) {

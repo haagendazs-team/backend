@@ -32,6 +32,7 @@ import com.haagendazs.payment.subscription.service.dto.ChangeSubscriptionRespons
 import com.haagendazs.payment.subscription.service.dto.GetSubscriptionResponse;
 
 import com.haagendazs.payment.subscription.service.dto.GetsubscriptionPeriodsResponse;
+import com.haagendazs.payment.subscription.service.dto.ScheduledPlanChangeResponse;
 
 import java.time.LocalDateTime;
 
@@ -187,6 +188,67 @@ public class SubscriptionService {
         return null;
     }
 
+    // 정기 자동결제 성공 후 기존 구독을 같은 플랜으로 갱신합니다.
+    @Transactional
+    public void renewSubscriptionByPayment(
+            Orders orders,
+            Billing billing
+    ) {
+        Long subscriptionProductId = orders.getSubscriptionProductId();
+        Products product = productsRepository.findById(subscriptionProductId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PRODUCT_NOT_FOUND));
+
+        renewSubscriptionPeriod(
+                orders.getWorkspaceId(),
+                product.getProduct_detail_id(),
+                billing.getId(),
+                LocalDateTime.now()
+        );
+    }
+
+    // STANDARD처럼 결제가 필요 없는 플랜의 구독 기간을 주문 없이 연장합니다.
+    @Transactional
+    public void renewSubscriptionPeriod(
+            Long workspaceId,
+            Long planId,
+            Long billingId,
+            LocalDateTime periodStart
+    ) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+        SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
+
+        applyRenewalPlan(subscription, plan, billingId, periodStart);
+    }
+
+    // 갱신 결제가 시작되어 구독 기간은 지났지만 결제 결과가 아직 확정되지 않은 상태로 표시합니다.
+    @Transactional
+    public void markRenewalPending(Long workspaceId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        subscription.markRenewalPending();
+    }
+
+    // 갱신 결제가 일시 실패하여 유예/재시도 중인 상태로 표시합니다.
+    @Transactional
+    public void markPastDue(Long workspaceId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        subscription.markPastDue();
+    }
+
+    // 갱신 최종 실패 또는 만료 상태로 표시합니다.
+    @Transactional
+    public void expireSubscription(Long workspaceId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        subscription.expire();
+    }
+
     //워크스페이스의 현재 구독 확인
     @Transactional(readOnly = true)
     public GetSubscriptionResponse getWorkspaceSubscription(Long workspaceId){
@@ -215,6 +277,29 @@ public class SubscriptionService {
                 .map(this::toResponse)
                 .toList();
 
+    }
+
+    //워크스페이스에 예약된 구독 플랜 변경을 조회합니다.
+    @Transactional(readOnly = true)
+    public ScheduledPlanChangeResponse getScheduledPlanChange(Long workspaceId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        SubscriptionPlan currentPlan = subscriptionPlanRepository.findById(subscription.getSubscriptionPlanId())
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
+
+        return subscriptionScheduledChangesRepository
+                .findFirstBySubscriptionIdAndChangeTypeAndChangeStatusOrderByScheduledAtDesc(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                )
+                .map(scheduledChange -> toScheduledPlanChangeResponse(currentPlan, scheduledChange))
+                .orElseGet(() -> ScheduledPlanChangeResponse.none(
+                        currentPlan.getId(),
+                        currentPlan.getName(),
+                        currentPlan.getType()
+                ));
     }
 
     //워크스페이스 구독 변경
@@ -278,6 +363,31 @@ public class SubscriptionService {
         );
     }
 
+    // 다음 갱신 시점에 적용될 예정인 플랜 변경 예약을 취소합니다.
+    @Transactional
+    public void cancelScheduledPlanChange(
+            Long memberId,
+            Long workspaceId
+    ) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        List<SubscriptionScheduledChanges> scheduledChanges =
+                subscriptionScheduledChangesRepository.findBySubscriptionIdAndMemberIdAndChangeTypeAndChangeStatus(
+                        subscription.getId(),
+                        memberId,
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                );
+
+        if (scheduledChanges.isEmpty()) {
+            throw new BusinessException(PaymentErrorCode.SUBSCRIPTION_SCHEDULED_CHANGE_NOT_FOUND);
+        }
+
+        LocalDateTime canceledAt = LocalDateTime.now();
+        scheduledChanges.forEach(scheduledChange -> scheduledChange.cancel(canceledAt));
+    }
+
     private void validateSubscriptionProduct(Products product) {
         if (product.getStatus() == ProductStatus.SUSPENDED) {
             throw new BusinessException(PaymentErrorCode.PRODUCT_SUSPENDED);
@@ -304,6 +414,8 @@ public class SubscriptionService {
             Subscriptions subscription,
             SubscriptionPlan targetPlan
     ) {
+        validateNoScheduledPlanChange(subscription);
+
         SubscriptionScheduledChanges scheduledChange = SubscriptionScheduledChanges.builder()
                 .memberId(memberId)
                 .subscriptionId(subscription.getId())
@@ -315,6 +427,80 @@ public class SubscriptionService {
                 .build();
 
         subscriptionScheduledChangesRepository.save(scheduledChange);
+    }
+
+    private void validateNoScheduledPlanChange(Subscriptions subscription) {
+        List<SubscriptionScheduledChanges> scheduledChanges =
+                subscriptionScheduledChangesRepository.findBySubscriptionIdAndChangeTypeAndChangeStatus(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                );
+
+        if (!scheduledChanges.isEmpty()) {
+            throw new BusinessException(PaymentErrorCode.SUBSCRIPTION_SCHEDULED_CHANGE_ALREADY_EXISTS);
+        }
+    }
+
+    private ScheduledPlanChangeResponse toScheduledPlanChangeResponse(
+            SubscriptionPlan currentPlan,
+            SubscriptionScheduledChanges scheduledChange
+    ) {
+        SubscriptionPlan requestedPlan = subscriptionPlanRepository.findById(scheduledChange.getRequestedPlanId())
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
+
+        return new ScheduledPlanChangeResponse(
+                true,
+                currentPlan.getId(),
+                currentPlan.getName(),
+                currentPlan.getType(),
+                requestedPlan.getId(),
+                requestedPlan.getName(),
+                requestedPlan.getType(),
+                scheduledChange.getScheduledAt(),
+                true
+        );
+    }
+
+    private void applyRenewalPlan(
+            Subscriptions subscription,
+            SubscriptionPlan plan,
+            Long billingId,
+            LocalDateTime periodStart
+    ) {
+        LocalDateTime periodEnd = periodStart.plusDays(plan.getDurationDays());
+
+        subscription.updatePlan(
+                plan.getId(),
+                periodStart,
+                periodEnd,
+                billingId
+        );
+
+        subscriptionPeriodsRepository.save(
+                SubscriptionPeriods.builder()
+                        .planId(plan.getId())
+                        .workspaceId(subscription.getWorkspaceId())
+                        .periodStart(periodStart)
+                        .periodEnd(periodEnd)
+                        .status(SubscriptionStatus.ACTIVE)
+                        .build()
+        );
+
+        paymentEventProducer.publishSubscriptionChanged(
+                new SubscriptionChangedEvent(
+                        subscription.getWorkspaceId(),
+                        plan.getSearchableDays(),
+                        LocalDateTime.now()
+                )
+        );
+        paymentEventProducer.publishWorkspaceSubscribed(
+                new WorkspaceSubscribedEvent(
+                        subscription.getWorkspaceId(),
+                        plan.getType().name(),
+                        periodStart
+                )
+        );
     }
 
     private GetsubscriptionPeriodsResponse toResponse(SubscriptionPeriods subscriptionPeriods) {

@@ -4,9 +4,11 @@ import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.payment.global.PaymentErrorCode;
 import com.haagendazs.payment.payment.entity.Billing;
 import com.haagendazs.payment.payment.enums.PaymentStatus;
+import com.haagendazs.payment.payment.enums.TossPaymentErrorAction;
 import com.haagendazs.payment.payment.service.dto.BillingPaymentRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
 import com.haagendazs.payment.payment.service.tools.TossBillingClient;
+import com.haagendazs.payment.payment.service.tools.TossPaymentException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,11 +23,25 @@ public class BillingPaymentService {
 
     // 회원의 기본 자동결제 결제수단으로 주문을 결제합니다.
     public void payWithRegisteredBillingMethod(Long memberId, BillingPaymentRequest request) {
-        payWithBillingMethod(memberId, request.orderNo(), null);
+        payCheckoutWithBillingMethod(memberId, request.orderNo(), null);
     }
 
-    // 지정된 결제수단으로 주문을 결제합니다. 결제수단이 null이면 기본 결제수단을 사용합니다.
-    public void payWithBillingMethod(Long memberId, String orderNo, Billing billing) {
+    // checkout 결제입니다. 실패하면 즉시 실패 처리하고 사용자에게 피드백합니다.
+    public void payCheckoutWithBillingMethod(Long memberId, String orderNo, Billing billing) {
+        payWithBillingMethod(memberId, orderNo, billing, PaymentFailurePolicy.CHECKOUT);
+    }
+
+    // 정기 자동결제입니다. 일시 장애는 실패 확정 대신 재시도 예약 상태로 남깁니다.
+    public void paySubscriptionRenewalWithBillingMethod(Long memberId, String orderNo, Billing billing) {
+        payWithBillingMethod(memberId, orderNo, billing, PaymentFailurePolicy.SUBSCRIPTION_RENEWAL);
+    }
+
+    private void payWithBillingMethod(
+            Long memberId,
+            String orderNo,
+            Billing billing,
+            PaymentFailurePolicy failurePolicy
+    ) {
         BillingPaymentTransactionService.BillingPaymentPreparation preparation =
                 billingPaymentTransactionService.prepareBillingPayment(memberId, orderNo, billing);
 
@@ -33,6 +49,11 @@ public class BillingPaymentService {
 
         try {
             paymentResponse = executeBillingPayment(preparation);
+        } catch (TossPaymentException e) {
+            if (handleTossPaymentException(memberId, preparation, e, failurePolicy)) {
+                return;
+            }
+            throw e;
         } catch (RuntimeException e) {
             failBillingPayment(memberId, preparation, e);
             throw e;
@@ -46,7 +67,7 @@ public class BillingPaymentService {
         }
 
         try {
-            billingPaymentTransactionService.completeBillingPayment(memberId, preparation, paymentResponse);
+            completePayment(memberId, preparation, paymentResponse, failurePolicy);
         } catch (RuntimeException e) {
             markReconcileRequired(memberId, preparation, e);
             throw e;
@@ -66,12 +87,80 @@ public class BillingPaymentService {
         );
     }
 
+    private boolean handleTossPaymentException(
+            Long memberId,
+            BillingPaymentTransactionService.BillingPaymentPreparation preparation,
+            TossPaymentException exception,
+            PaymentFailurePolicy failurePolicy
+    ) {
+        TossPaymentErrorAction action = exception.getTossPaymentErrorCode().getAction();
+
+        if (action == TossPaymentErrorAction.QUERY_AND_RECONCILE) {
+            return queryAndReconcile(memberId, preparation, exception, failurePolicy);
+        }
+
+        if (failurePolicy == PaymentFailurePolicy.SUBSCRIPTION_RENEWAL
+                && action == TossPaymentErrorAction.RETRY_LATER) {
+            markRetryScheduled(memberId, preparation, exception);
+            return false;
+        }
+
+        failBillingPayment(memberId, preparation, exception);
+        return false;
+    }
+
+    private boolean queryAndReconcile(
+            Long memberId,
+            BillingPaymentTransactionService.BillingPaymentPreparation preparation,
+            TossPaymentException exception,
+            PaymentFailurePolicy failurePolicy
+    ) {
+        try {
+            TossBillingPaymentResponse queriedPayment =
+                    tossBillingClient.getPaymentByOrderId(preparation.orderNo());
+
+            if (isSuccessfulPayment(preparation, queriedPayment)) {
+                completePayment(
+                        memberId,
+                        preparation,
+                        queriedPayment,
+                        failurePolicy
+                );
+                return true;
+            }
+
+            failBillingPayment(memberId, preparation, exception);
+        } catch (RuntimeException reconcileException) {
+            markReconcileRequired(memberId, preparation, reconcileException);
+        }
+
+        return false;
+    }
+
     private boolean isSuccessfulPayment(
             BillingPaymentTransactionService.BillingPaymentPreparation preparation,
             TossBillingPaymentResponse paymentResponse
     ) {
         return PaymentStatus.DONE.name().equals(paymentResponse.status())
                 && preparation.amount().equals(paymentResponse.totalAmount());
+    }
+
+    private void completePayment(
+            Long memberId,
+            BillingPaymentTransactionService.BillingPaymentPreparation preparation,
+            TossBillingPaymentResponse paymentResponse,
+            PaymentFailurePolicy failurePolicy
+    ) {
+        if (failurePolicy == PaymentFailurePolicy.SUBSCRIPTION_RENEWAL) {
+            billingPaymentTransactionService.completeSubscriptionRenewalPayment(
+                    memberId,
+                    preparation,
+                    paymentResponse
+            );
+            return;
+        }
+
+        billingPaymentTransactionService.completeBillingPayment(memberId, preparation, paymentResponse);
     }
 
     private void failBillingPayment(
@@ -106,5 +195,27 @@ public class BillingPaymentService {
                     handlingException
             );
         }
+    }
+
+    private void markRetryScheduled(
+            Long memberId,
+            BillingPaymentTransactionService.BillingPaymentPreparation preparation,
+            RuntimeException exception
+    ) {
+        try {
+            billingPaymentTransactionService.markRetryScheduled(memberId, preparation, exception);
+        } catch (RuntimeException handlingException) {
+            log.warn(
+                    "자동결제 재시도 예약 상태 보정 실패 memberId={} orderNo={}",
+                    memberId,
+                    preparation.orderNo(),
+                    handlingException
+            );
+        }
+    }
+
+    private enum PaymentFailurePolicy {
+        CHECKOUT,
+        SUBSCRIPTION_RENEWAL
     }
 }

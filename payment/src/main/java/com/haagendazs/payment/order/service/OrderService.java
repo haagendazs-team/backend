@@ -8,6 +8,10 @@ import com.haagendazs.payment.order.enums.OrderType;
 import com.haagendazs.payment.order.repository.OrderRepository;
 import com.haagendazs.payment.order.service.dto.OrderCreateRequest;
 import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
+import com.haagendazs.payment.order.service.dto.OrderDetailResponse;
+import com.haagendazs.payment.order.service.dto.OrderListResponse;
+import com.haagendazs.payment.order.service.dto.OrderPaymentResponse;
+import com.haagendazs.payment.payment.repository.PaymentRepository;
 import com.haagendazs.payment.payment.service.PaymentCustomerKeyService;
 import com.haagendazs.payment.product.entity.OrderItems;
 import com.haagendazs.payment.product.entity.Products;
@@ -17,9 +21,12 @@ import com.haagendazs.payment.product.repository.ProductsRepository;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,10 +37,37 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductsRepository productsRepository;
     private final PaymentCustomerKeyService paymentCustomerKeyService;
+    private final PaymentRepository paymentRepository;
 
     //주문생성
     @Transactional
     public OrderCreateResponse createOrder(Long memberId, Long workspaceId, OrderCreateRequest dto){
+        return createOrder(memberId, workspaceId, dto, null);
+    }
+
+    //주문생성. idempotencyKey가 같으면 새 주문을 만들지 않고 기존 주문을 반환합니다.
+    @Transactional
+    public OrderCreateResponse createOrder(
+            Long memberId,
+            Long workspaceId,
+            OrderCreateRequest dto,
+            String idempotencyKey
+    ){
+        String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+
+        if (normalizedIdempotencyKey != null) {
+            Optional<Orders> existingOrder =
+                    orderRepository.findByMemberIdAndWorkspaceIdAndIdempotencyKey(
+                            memberId,
+                            workspaceId,
+                            normalizedIdempotencyKey
+                    );
+
+            if (existingOrder.isPresent()) {
+                return toOrderCreateResponse(existingOrder.get());
+            }
+        }
+
         Products product = productsRepository.findById(dto.productId())
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PRODUCT_NOT_FOUND));
         if (product.getStatus() == ProductStatus.SUSPENDED) {
@@ -62,6 +96,7 @@ public class OrderService {
                 .memberId(memberId)
                 .workspaceId(workspaceId)
                 .orderNo(generateOrderNumber())
+                .idempotencyKey(normalizedIdempotencyKey)
                 .totalAmount(totalAmount)
                 .orderStatus(OrderStatus.PENDING)
                 .orderType(orderType)
@@ -78,12 +113,17 @@ public class OrderService {
                 .totalPrice(totalAmount)
                 .build());
 
-        Orders savedOrder = orderRepository.save(order);
+        Orders savedOrder = saveOrderOrGetExisting(
+                order,
+                memberId,
+                workspaceId,
+                normalizedIdempotencyKey
+        );
 
         return new OrderCreateResponse(
                 savedOrder.getId(),
                 savedOrder.getOrderNo(),
-                product.getName(),
+                getFirstItemName(savedOrder),
                 savedOrder.getTotalAmount(),
                 savedOrder.getOrderType(),
                 customerKey
@@ -140,6 +180,88 @@ public class OrderService {
                 savedOrder.getOrderType(),
                 customerKey
         );
+    }
+
+    private Orders saveOrderOrGetExisting(
+            Orders order,
+            Long memberId,
+            Long workspaceId,
+            String idempotencyKey
+    ) {
+        try {
+            return orderRepository.saveAndFlush(order);
+        } catch (DataIntegrityViolationException e) {
+            if (idempotencyKey == null) {
+                throw e;
+            }
+
+            return orderRepository.findByMemberIdAndWorkspaceIdAndIdempotencyKey(
+                            memberId,
+                            workspaceId,
+                            idempotencyKey
+                    )
+                    .orElseThrow(() -> e);
+        }
+    }
+
+    private OrderCreateResponse toOrderCreateResponse(Orders order) {
+        String customerKey = order.getOrderType() == OrderType.Billing
+                ? paymentCustomerKeyService.getOrCreateCustomerKey(order.getMemberId())
+                : null;
+
+        return new OrderCreateResponse(
+                order.getId(),
+                order.getOrderNo(),
+                getFirstItemName(order),
+                order.getTotalAmount(),
+                order.getOrderType(),
+                customerKey
+        );
+    }
+
+    private String normalizeIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+
+        return idempotencyKey.trim();
+    }
+
+    private String getFirstItemName(Orders order) {
+        if (order.getOrderItems().isEmpty()) {
+            return null;
+        }
+
+        return order.getOrderItems().get(0).getItemName();
+    }
+
+    // 본인이 워크스페이스에서 생성한 주문 목록을 최신순으로 조회합니다.
+    @Transactional(readOnly = true)
+    public List<OrderListResponse> getMyOrders(
+            Long memberId,
+            Long workspaceId
+    ) {
+        return orderRepository.findByMemberIdAndWorkspaceIdOrderByOrderedAtDesc(memberId, workspaceId)
+                .stream()
+                .map(OrderListResponse::from)
+                .toList();
+    }
+
+    // 본인 주문 상세와 해당 주문에 연결된 결제 내역을 함께 조회합니다.
+    @Transactional(readOnly = true)
+    public OrderDetailResponse getMyOrderDetail(
+            Long memberId,
+            Long workspaceId,
+            String orderNo
+    ) {
+        Orders order = orderRepository.findByOrderNoAndMemberIdAndWorkspaceId(orderNo, memberId, workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.ORDER_NOT_FOUND));
+
+        OrderPaymentResponse payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId())
+                .map(OrderPaymentResponse::from)
+                .orElse(null);
+
+        return OrderDetailResponse.of(order, payment);
     }
 
     // 주문번호 생성

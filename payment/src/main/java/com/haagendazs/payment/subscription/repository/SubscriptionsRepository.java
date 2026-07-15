@@ -29,4 +29,29 @@ public interface SubscriptionsRepository extends JpaRepository<Subscriptions, Lo
             @Param("now") LocalDateTime now,
             @Param("normalPlanId") Long normalPlanId
     );
+
+    @Query("""
+        select s
+        from Subscriptions s
+        where s.status in ('ACTIVE', 'EXPIRED')
+          and s.currentPeriodEnd <= :now
+          and s.subscriptionPlanId = :standardPlanId
+    """)
+    List<Subscriptions> findRenewalDueStandardSubscriptions(
+            @Param("now") LocalDateTime now,
+            @Param("standardPlanId") Long standardPlanId
+    );
+
+    @Query("""
+        select s
+        from Subscriptions s
+        where s.status = 'ACTIVE'
+          and s.currentPeriodEnd <= :now
+          and s.subscriptionPlanId <> :standardPlanId
+          and s.billingId is not null
+    """)
+    List<Subscriptions> findRenewalDuePaidSubscriptions(
+            @Param("now") LocalDateTime now,
+            @Param("standardPlanId") Long standardPlanId
+    );
 }

@@ -49,5 +49,18 @@ public class Subscriptions extends BaseEntity {
         this.currentPeriodStart = now;
         this.currentPeriodEnd = localDateTime;
         this.billingId = billingId;
+        this.status = SubscriptionStatus.ACTIVE;
+    }
+
+    public void markRenewalPending() {
+        this.status = SubscriptionStatus.RENEWAL_PENDING;
+    }
+
+    public void markPastDue() {
+        this.status = SubscriptionStatus.PAST_DUE;
+    }
+
+    public void expire() {
+        this.status = SubscriptionStatus.EXPIRED;
     }
 }

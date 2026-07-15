@@ -57,4 +57,9 @@ public class SubscriptionScheduledChanges {
     public void apply() {
         this.changeStatus = SubscriptionChangeStatus.APPLIED;
     }
+
+    public void cancel(LocalDateTime canceledAt) {
+        this.changeStatus = SubscriptionChangeStatus.CANCELED;
+        this.canceledAt = canceledAt;
+    }
 }

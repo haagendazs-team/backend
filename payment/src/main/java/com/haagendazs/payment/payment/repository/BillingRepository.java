@@ -22,6 +22,11 @@ public interface BillingRepository extends JpaRepository<Billing, Long> {
             BillingStatus billingStatus
     );
 
+    Optional<Billing> findByIdAndBillingStatus(
+            Long id,
+            BillingStatus billingStatus
+    );
+
     long countByMemberIdAndBillingStatus(Long memberId, BillingStatus billingStatus);
 
     boolean existsByMemberIdAndBillingStatusAndIsDefaultTrue(

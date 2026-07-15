@@ -50,7 +50,11 @@ public enum PaymentErrorCode implements ErrorCode {
     BILLING_KEY_DELETE_FAILED(HttpStatus.BAD_GATEWAY, "P022",
             "토스페이먼츠 빌링키 삭제에 실패했습니다."),
     INVALID_SUBSCRIPTION_CHANGE(HttpStatus.BAD_REQUEST, "P023",
-            "변경할 수 없는 구독 플랜입니다.");
+            "변경할 수 없는 구독 플랜입니다."),
+    SUBSCRIPTION_SCHEDULED_CHANGE_NOT_FOUND(HttpStatus.NOT_FOUND, "P024",
+            "예약된 구독 변경을 찾을 수 없습니다."),
+    SUBSCRIPTION_SCHEDULED_CHANGE_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "P025",
+            "이미 예약된 구독 변경이 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
