@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,6 +37,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
@@ -134,6 +137,127 @@ public class OrderServiceTest {
                     assertThat(order.getId()).isEqualTo(firstResponse.orderId());
                     assertThat(order.getIdempotencyKey()).isEqualTo(idempotencyKey);
                 });
+    }
+
+    @Test
+    @DisplayName("createOrderTest 성공 - 멱등키는 앞뒤 공백 제거 후 비교")
+    void createOrderIdempotentTrimmedKeyTest() {
+        Long memberId = 21L;
+        Long workspaceId = 21L;
+        when(paymentCustomerKeyService.getOrCreateCustomerKey(memberId)).thenReturn("customer-key-21");
+
+        OrderCreateResponse firstResponse = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "  checkout-idempotency-key-21  "
+        );
+        OrderCreateResponse secondResponse = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "checkout-idempotency-key-21"
+        );
+
+        assertThat(secondResponse.orderId()).isEqualTo(firstResponse.orderId());
+        assertThat(orderRepository.findById(firstResponse.orderId()).get().getIdempotencyKey())
+                .isEqualTo("checkout-idempotency-key-21");
+    }
+
+    @Test
+    @DisplayName("createOrderTest 성공 - 빈 멱등키는 사용하지 않음")
+    void createOrderBlankIdempotencyKeyTest() {
+        Long memberId = 22L;
+        Long workspaceId = 22L;
+        when(paymentCustomerKeyService.getOrCreateCustomerKey(memberId)).thenReturn("customer-key-22");
+
+        OrderCreateResponse firstResponse = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "   "
+        );
+        OrderCreateResponse secondResponse = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "   "
+        );
+
+        assertThat(secondResponse.orderId()).isNotEqualTo(firstResponse.orderId());
+        assertThat(orderRepository.findByMemberIdAndWorkspaceIdOrderByOrderedAtDesc(memberId, workspaceId))
+                .hasSize(2)
+                .allSatisfy(order -> assertThat(order.getIdempotencyKey()).isNull());
+    }
+
+    @Test
+    @DisplayName("createOrderTest 성공 - 기존 일반 주문은 customerKey 없이 반환")
+    void createOrderExistingNormalOrderWithoutCustomerKeyTest() {
+        Long memberId = 23L;
+        Long workspaceId = 23L;
+        Orders existingOrder = orderRepository.saveAndFlush(Orders.builder()
+                .memberId(memberId)
+                .workspaceId(workspaceId)
+                .orderNo("ORDER-NORMAL-23")
+                .idempotencyKey("normal-order-key-23")
+                .totalAmount(5000L)
+                .orderStatus(OrderStatus.PENDING)
+                .orderType(OrderType.Normal)
+                .orderedAt(LocalDateTime.now())
+                .expiredAt(LocalDateTime.now().plusMinutes(30))
+                .build());
+
+        OrderCreateResponse response = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "normal-order-key-23"
+        );
+
+        assertThat(response.orderId()).isEqualTo(existingOrder.getId());
+        assertThat(response.orderNo()).isEqualTo("ORDER-NORMAL-23");
+        assertThat(response.orderName()).isNull();
+        assertThat(response.orderType()).isEqualTo(OrderType.Normal);
+        assertThat(response.customerKey()).isNull();
+        verify(paymentCustomerKeyService, never()).getOrCreateCustomerKey(memberId);
+    }
+
+    @Test
+    @DisplayName("createOrderTest 성공 - 일반 상품은 일반 주문으로 생성")
+    void createOrderNormalProductTest() {
+        Long memberId = 24L;
+        Long workspaceId = 24L;
+        Products normalProduct = productsRepository.saveAndFlush(Products.builder()
+                .name("Normal Product")
+                .productType(ProductType.NORMAL)
+                .price(5000L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(1L)
+                .build());
+
+        OrderCreateResponse response = orderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(normalProduct.getId())
+        );
+
+        assertThat(response.orderId()).isNotNull();
+        assertThat(response.orderName()).isEqualTo("Normal Product");
+        assertThat(response.amount()).isEqualTo(5000L);
+        assertThat(response.orderType()).isEqualTo(OrderType.Normal);
+        assertThat(response.customerKey()).isNull();
+
+        Orders savedOrder = orderRepository.findById(response.orderId()).get();
+        assertThat(savedOrder.getOrderType()).isEqualTo(OrderType.Normal);
+        assertThat(savedOrder.getOrderItems())
+                .singleElement()
+                .satisfies(orderItem -> {
+                    assertThat(orderItem.getProductId()).isEqualTo(normalProduct.getId());
+                    assertThat(orderItem.getItemName()).isEqualTo("Normal Product");
+                    assertThat(orderItem.getItemType()).isEqualTo(ProductType.NORMAL.name());
+                    assertThat(orderItem.getTotalPrice()).isEqualTo(5000L);
+                });
+        verify(paymentCustomerKeyService, never()).getOrCreateCustomerKey(memberId);
     }
 
     @Test
@@ -373,6 +497,133 @@ public class OrderServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(PaymentErrorCode.PRODUCT_SUSPENDED);
 
+        verify(paymentCustomerKeyService, never()).getOrCreateCustomerKey(memberId);
+    }
+
+    @Test
+    @DisplayName("createOrderTest 성공 - 멱등키 저장 충돌시 기존 주문 반환")
+    void createOrderIdempotencySaveConflictReturnsExistingOrderTest() {
+        Long memberId = 30L;
+        Long workspaceId = 30L;
+        ProductsRepository mockProductsRepository = mock(ProductsRepository.class);
+        OrderRepository mockOrderRepository = mock(OrderRepository.class);
+        PaymentCustomerKeyService mockPaymentCustomerKeyService = mock(PaymentCustomerKeyService.class);
+        PaymentRepository mockPaymentRepository = mock(PaymentRepository.class);
+        OrderService unitOrderService = new OrderService(
+                mockOrderRepository,
+                mockProductsRepository,
+                mockPaymentCustomerKeyService,
+                mockPaymentRepository
+        );
+        Products product = Products.builder()
+                .id(2L)
+                .name("Plus Subscription")
+                .productType(ProductType.SUBSCRIPTION)
+                .price(19900L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(2L)
+                .build();
+        Orders existingOrder = Orders.builder()
+                .id(300L)
+                .memberId(memberId)
+                .workspaceId(workspaceId)
+                .orderNo("ORDER-300")
+                .idempotencyKey("idempotency-key-30")
+                .totalAmount(19900L)
+                .orderStatus(OrderStatus.PENDING)
+                .orderType(OrderType.Billing)
+                .orderedAt(LocalDateTime.now())
+                .expiredAt(LocalDateTime.now().plusMinutes(30))
+                .build();
+        existingOrder.addOrderItem(com.haagendazs.payment.product.entity.OrderItems.builder()
+                .productId(2L)
+                .itemName("Plus Subscription")
+                .itemType(ProductType.SUBSCRIPTION.name())
+                .unitPrice(19900L)
+                .quantity(1L)
+                .totalPrice(19900L)
+                .build());
+        when(mockOrderRepository.findByMemberIdAndWorkspaceIdAndIdempotencyKey(
+                memberId,
+                workspaceId,
+                "idempotency-key-30"
+        )).thenReturn(Optional.empty(), Optional.of(existingOrder));
+        when(mockProductsRepository.findById(2L)).thenReturn(Optional.of(product));
+        when(mockPaymentCustomerKeyService.getOrCreateCustomerKey(memberId)).thenReturn("customer-key-30");
+        when(mockOrderRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate idempotency key"));
+
+        OrderCreateResponse response = unitOrderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L),
+                "idempotency-key-30"
+        );
+
+        assertThat(response.orderId()).isEqualTo(existingOrder.getId());
+        assertThat(response.orderNo()).isEqualTo(existingOrder.getOrderNo());
+        assertThat(response.orderName()).isEqualTo("Plus Subscription");
+        assertThat(response.customerKey()).isEqualTo("customer-key-30");
+    }
+
+    @Test
+    @DisplayName("createOrderTest 실패 - 멱등키 없는 저장 충돌은 재던짐")
+    void createOrderSaveConflictWithoutIdempotencyKeyThrowsTest() {
+        Long memberId = 31L;
+        Long workspaceId = 31L;
+        ProductsRepository mockProductsRepository = mock(ProductsRepository.class);
+        OrderRepository mockOrderRepository = mock(OrderRepository.class);
+        PaymentCustomerKeyService mockPaymentCustomerKeyService = mock(PaymentCustomerKeyService.class);
+        PaymentRepository mockPaymentRepository = mock(PaymentRepository.class);
+        OrderService unitOrderService = new OrderService(
+                mockOrderRepository,
+                mockProductsRepository,
+                mockPaymentCustomerKeyService,
+                mockPaymentRepository
+        );
+        Products product = Products.builder()
+                .id(2L)
+                .name("Plus Subscription")
+                .productType(ProductType.SUBSCRIPTION)
+                .price(19900L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(2L)
+                .build();
+        when(mockProductsRepository.findById(2L)).thenReturn(Optional.of(product));
+        when(mockPaymentCustomerKeyService.getOrCreateCustomerKey(memberId)).thenReturn("customer-key-31");
+        when(mockOrderRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate order number"));
+
+        assertThatThrownBy(() -> unitOrderService.createOrder(
+                memberId,
+                workspaceId,
+                new OrderCreateRequest(2L)
+        ))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("구독 주문 금액 지정 생성 실패 - 지원하지 않는 상품 타입")
+    void createSubscriptionOrderWithAmountUnsupportedProductTypeTest() {
+        Long memberId = 32L;
+        Long workspaceId = 32L;
+        Products normalProduct = productsRepository.saveAndFlush(Products.builder()
+                .name("Normal Product")
+                .productType(ProductType.NORMAL)
+                .price(5000L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(1L)
+                .build());
+
+        assertThatThrownBy(() -> orderService.createSubscriptionOrderWithAmount(
+                memberId,
+                workspaceId,
+                normalProduct.getId(),
+                10000L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.UNSUPPORTED_PRODUCT_TYPE);
         verify(paymentCustomerKeyService, never()).getOrCreateCustomerKey(memberId);
     }
 }

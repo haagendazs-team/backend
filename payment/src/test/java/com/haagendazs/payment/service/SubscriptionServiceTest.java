@@ -61,6 +61,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(classes = TestPaymentApplication.class)
@@ -68,7 +69,7 @@ import org.springframework.transaction.annotation.Transactional;
 @ActiveProfiles("test")
 public class SubscriptionServiceTest {
 
-    @Autowired
+    @MockitoSpyBean
     private SubscriptionService subscriptionService;
 
     @Autowired
@@ -311,6 +312,17 @@ public class SubscriptionServiceTest {
         );
     }
 
+    private Subscriptions saveDuePaidSubscription(Long workspaceId, Long planId, Long billingId) {
+        return subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(planId)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().minusDays(1))
+                .billingId(billingId)
+                .build());
+    }
+
     @Test
     @DisplayName("정기 자동결제 성공 후 구독 갱신")
     void renewSubscriptionByPaymentTest() {
@@ -542,6 +554,181 @@ public class SubscriptionServiceTest {
         assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
                 .isEqualTo(SubscriptionStatus.PAST_DUE);
         verify(paymentRetryJobService, never()).scheduleRetry(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 대상 조회시 STANDARD 플랜이 없으면 예외 발생")
+    void renewDueSubscriptionsStandardPlanNotFoundTest() {
+        subscriptionPlanRepository.deleteById(1L);
+        subscriptionPlanRepository.flush();
+
+        assertThatThrownBy(() -> subscriptionRenewalService.renewDueSubscriptions())
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.PLAN_NOT_FOUND);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 대상 EXPIRED STANDARD 구독 - 결제 없이 기간 갱신")
+    void renewDueExpiredStandardSubscriptionsTest() {
+        Long workspaceId = 25L;
+        LocalDateTime previousPeriodEnd = LocalDateTime.now().minusDays(1);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(1L)
+                .workspaceId(workspaceId)
+                .status(SubscriptionStatus.EXPIRED)
+                .currentPeriodStart(LocalDateTime.now().minusDays(366))
+                .currentPeriodEnd(previousPeriodEnd)
+                .build());
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId).get();
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(subscription.getCurrentPeriodEnd()).isAfter(previousPeriodEnd);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 - 플랜이 없으면 결제 유예 상태 전환")
+    void renewDuePaidSubscriptionsPlanNotFoundTest() {
+        Long memberId = 26L;
+        Long workspaceId = 26L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 999L, billing.getId());
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 실패 후 결제 유예 상태 전환도 실패하면 예외를 삼킴")
+    void renewDuePaidSubscriptionsMarkPastDueFailureTest() {
+        Long memberId = 35L;
+        Long workspaceId = 35L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 999L, billing.getId());
+        org.mockito.Mockito.doThrow(new IllegalStateException("past due update failed"))
+                .when(subscriptionService)
+                .markPastDue(workspaceId);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.ACTIVE);
+        verify(subscriptionService).markPastDue(workspaceId);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 - 상품이 없으면 결제 유예 상태 전환")
+    void renewDuePaidSubscriptionsProductNotFoundTest() {
+        Long memberId = 27L;
+        Long workspaceId = 27L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 3L, billing.getId());
+        productsRepository.deleteById(3L);
+        productsRepository.flush();
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 - 활성 빌링이 없으면 결제 유예 상태 전환")
+    void renewDuePaidSubscriptionsActiveBillingNotFoundTest() {
+        Long memberId = 28L;
+        Long workspaceId = 28L;
+        Billing inactiveBilling = billingRepository.saveAndFlush(Billing.builder()
+                .memberId(memberId)
+                .billingKey("inactive-billing-key-" + memberId)
+                .billingStatus(BillingStatus.INACTIVE)
+                .isDefault(false)
+                .build());
+        saveDuePaidSubscription(workspaceId, 2L, inactiveBilling.getId());
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 결제 처리 중 런타임 예외 - 결제 유예 상태 전환")
+    void renewDuePaidSubscriptionsPaymentRuntimeExceptionTest() {
+        Long memberId = 29L;
+        Long workspaceId = 29L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 2L, billing.getId());
+        OrderCreateResponse order = orderResponse(2900L, "ORDER-2900");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenReturn(order);
+        org.mockito.Mockito.doThrow(new IllegalStateException("payment service unavailable"))
+                .when(billingPaymentService)
+                .paySubscriptionRenewalWithBillingMethod(memberId, order.orderNo(), billing);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        verify(paymentRetryJobService, never()).scheduleRetry(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 자동결제 일시 실패 - 재시도 예약 실패를 삼킴")
+    void renewDuePaidSubscriptionsRetryScheduleFailureTest() {
+        Long memberId = 33L;
+        Long workspaceId = 33L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 2L, billing.getId());
+        OrderCreateResponse order = orderResponse(3300L, "ORDER-3300");
+        TossPaymentException exception = tossException("FAILED_DB_PROCESSING");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenReturn(order);
+        org.mockito.Mockito.doThrow(exception)
+                .when(billingPaymentService)
+                .paySubscriptionRenewalWithBillingMethod(memberId, order.orderNo(), billing);
+        org.mockito.Mockito.doThrow(new IllegalStateException("retry scheduler unavailable"))
+                .when(paymentRetryJobService)
+                .scheduleRetry(memberId, order.orderNo(), billing.getId(), exception);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+        verify(paymentRetryJobService).scheduleRetry(memberId, order.orderNo(), billing.getId(), exception);
+    }
+
+    @Test
+    @DisplayName("갱신 유료 구독 주문 생성 중 일시 실패 - 재시도 예약하지 않음")
+    void renewDuePaidSubscriptionsRetryLaterWithoutOrderTest() {
+        Long memberId = 34L;
+        Long workspaceId = 34L;
+        Billing billing = saveActiveBilling(memberId);
+        saveDuePaidSubscription(workspaceId, 2L, billing.getId());
+        TossPaymentException exception = tossException("TOSS_CONNECT_TIMEOUT");
+        when(orderService.createSubscriptionOrderWithAmount(memberId, workspaceId, 2L, 19900L))
+                .thenThrow(exception);
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
+                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+        verify(paymentRetryJobService, never()).scheduleRetry(any(), any(), any(), any());
+        verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
     }
 
     //getWorkspaceSubscription 메서드 테스트

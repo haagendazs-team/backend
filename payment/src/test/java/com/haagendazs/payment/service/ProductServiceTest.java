@@ -94,4 +94,21 @@ class ProductServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(PaymentErrorCode.PRODUCT_DETAIL_NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("상품 상세 조회 - 지원하지 않는 상품 타입")
+    void getProductDetailUnsupportedProductTypeTest() {
+        productsRepository.saveAndFlush(Products.builder()
+                .name("Unsupported Product")
+                .productType(ProductType.NORMAL)
+                .price(1000L)
+                .status(ProductStatus.ACVIVE)
+                .product_detail_id(1L)
+                .build());
+
+        assertThatThrownBy(() -> productService.getProduct(ProductType.NORMAL))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(PaymentErrorCode.UNSUPPORTED_PRODUCT_TYPE);
+    }
 }

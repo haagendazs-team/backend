@@ -53,4 +53,4 @@ payment:
     encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
 
 toss:
-  secret-key: test-secret-key
+  secret-key: test_sk_GePWvyJnrKJ2EbDPBQ6eVgLzN97E
