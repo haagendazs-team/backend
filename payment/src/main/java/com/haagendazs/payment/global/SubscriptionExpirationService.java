@@ -59,6 +59,11 @@ public class SubscriptionExpirationService {
         SubscriptionPlan targetPlan = subscriptionPlanRepository.findById(scheduledChange.getRequestedPlanId())
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
 
+        // 유료 플랜 변경은 갱신 자동결제가 성공한 뒤 적용한다.
+        if (targetPlan.getType() != PlanType.STANDARD) {
+            return;
+        }
+
         applyPlan(subscription, targetPlan, now);
         publishWorkspaceSubscribed(subscription, targetPlan, now);
         scheduledChange.apply();

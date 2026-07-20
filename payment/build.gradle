@@ -37,6 +37,9 @@ dependencies {
     //카프카
     implementation 'org.springframework.kafka:spring-kafka'
 
+    testImplementation project(':notification').sourceSets.main.output
+    testImplementation 'io.projectreactor.kafka:reactor-kafka:1.3.25'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     testRuntimeOnly 'com.h2database:h2'
 }
@@ -47,6 +50,58 @@ jacoco {
 
 test {
     finalizedBy jacocoTestReport
+    useJUnitPlatform {
+        excludeTags 'seed'
+    }
+
+    doFirst {
+        if (filter.commandLineIncludePatterns.empty) {
+            options.excludeTags 'external'
+        }
+    }
+}
+
+tasks.register('tossRealApiTest', Test) {
+    group = 'verification'
+    description = '실제 Toss 테스트 API를 호출하는 결제 연동 테스트를 실행한다.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'external'
+        excludeTags 'card-issue', 'service-real-api'
+    }
+
+    shouldRunAfter test
+}
+
+tasks.register('tossServiceRealApiTest', Test) {
+    group = 'verification'
+    description = '실제 Toss 테스트 API를 호출하는 서비스 레벨 결제 연동 테스트를 실행한다.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'service-real-api'
+    }
+
+    shouldRunAfter test
+}
+
+tasks.register('tossCardIssueRealApiTest', Test) {
+    group = 'verification'
+    description = '실제 Toss 테스트 API로 카드정보 billingKey 발급/삭제 테스트를 실행한다.'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform {
+        includeTags 'card-issue'
+    }
+
+    shouldRunAfter test
 }
 
 jacocoTestReport {

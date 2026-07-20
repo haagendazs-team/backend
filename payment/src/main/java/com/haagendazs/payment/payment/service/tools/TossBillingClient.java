@@ -6,6 +6,7 @@ import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueResponse;
 import com.haagendazs.payment.payment.service.dto.TossBillingPaymentRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
+import com.haagendazs.payment.payment.service.dto.TossCardBillingKeyIssueRequest;
 import com.haagendazs.payment.payment.service.dto.TossErrorResponse;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
@@ -36,6 +37,41 @@ public class TossBillingClient {
         try {
             return restClient.post()
                     .uri("/v1/billing/authorizations/issue")
+                    .body(request)
+                    .retrieve()
+                    .body(TossBillingKeyIssueResponse.class);
+        } catch (RestClientResponseException e) {
+            throw toTossPaymentException(e);
+        } catch (ResourceAccessException e) {
+            throw toTossTimeoutException(e);
+        }
+    }
+
+    // 카드 정보를 직접 전달해 billingKey를 발급합니다. 카드 정보는 저장하지 말고 호출 직후 폐기해야 합니다.
+    public TossBillingKeyIssueResponse issueBillingKeyWithCard(
+            String customerKey,
+            String cardNumber,
+            String cardExpirationYear,
+            String cardExpirationMonth,
+            String customerIdentityNumber,
+            String cardPassword,
+            String customerName,
+            String customerEmail
+    ) {
+        TossCardBillingKeyIssueRequest request = new TossCardBillingKeyIssueRequest(
+                customerKey,
+                cardNumber,
+                cardExpirationYear,
+                cardExpirationMonth,
+                customerIdentityNumber,
+                cardPassword,
+                customerName,
+                customerEmail
+        );
+
+        try {
+            return restClient.post()
+                    .uri("/v1/billing/authorizations/card")
                     .body(request)
                     .retrieve()
                     .body(TossBillingKeyIssueResponse.class);

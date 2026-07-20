@@ -15,9 +15,13 @@ import com.haagendazs.payment.product.entity.Products;
 import com.haagendazs.payment.product.enums.ProductType;
 import com.haagendazs.payment.product.repository.ProductsRepository;
 import com.haagendazs.payment.subscription.entity.SubscriptionPlan;
+import com.haagendazs.payment.subscription.entity.SubscriptionScheduledChanges;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
 import com.haagendazs.payment.subscription.enums.PlanType;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
 import com.haagendazs.payment.subscription.repository.SubscriptionPlanRepository;
+import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +35,7 @@ public class SubscriptionRenewalService {
 
     private final SubscriptionsRepository subscriptionsRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final SubscriptionScheduledChangesRepository subscriptionScheduledChangesRepository;
     private final ProductsRepository productsRepository;
     private final BillingRepository billingRepository;
     private final OrderService orderService;
@@ -75,8 +80,7 @@ public class SubscriptionRenewalService {
         OrderCreateResponse order = null;
 
         try {
-            SubscriptionPlan plan = subscriptionPlanRepository.findById(subscription.getSubscriptionPlanId())
-                    .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
+            SubscriptionPlan plan = findRenewalPlan(subscription);
             Products product = productsRepository.findByProductTypeAndProductDetailId(
                             ProductType.SUBSCRIPTION,
                             plan.getId()
@@ -109,6 +113,21 @@ public class SubscriptionRenewalService {
                     e
             );
         }
+    }
+
+    private SubscriptionPlan findRenewalPlan(Subscriptions subscription) {
+        Long renewalPlanId = subscriptionScheduledChangesRepository
+                .findFirstBySubscriptionIdAndChangeTypeAndChangeStatusOrderByScheduledAtDesc(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                )
+                .filter(change -> !change.getScheduledAt().isAfter(LocalDateTime.now()))
+                .map(SubscriptionScheduledChanges::getRequestedPlanId)
+                .orElse(subscription.getSubscriptionPlanId());
+
+        return subscriptionPlanRepository.findById(renewalPlanId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PLAN_NOT_FOUND));
     }
 
     private void handleTossRenewalFailure(

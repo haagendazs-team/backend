@@ -204,6 +204,22 @@ public class SubscriptionService {
                 billing.getId(),
                 LocalDateTime.now()
         );
+        applyPaidScheduledPlanChange(orders.getWorkspaceId(), product.getProduct_detail_id());
+    }
+
+    private void applyPaidScheduledPlanChange(Long workspaceId, Long renewedPlanId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        subscriptionScheduledChangesRepository
+                .findFirstBySubscriptionIdAndChangeTypeAndChangeStatusOrderByScheduledAtDesc(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                )
+                .filter(change -> change.getRequestedPlanId().equals(renewedPlanId))
+                .filter(change -> !change.getScheduledAt().isAfter(LocalDateTime.now()))
+                .ifPresent(SubscriptionScheduledChanges::apply);
     }
 
     // STANDARD처럼 결제가 필요 없는 플랜의 구독 기간을 주문 없이 연장합니다.
