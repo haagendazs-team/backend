@@ -54,7 +54,9 @@ public enum PaymentErrorCode implements ErrorCode {
     SUBSCRIPTION_SCHEDULED_CHANGE_NOT_FOUND(HttpStatus.NOT_FOUND, "P024",
             "예약된 구독 변경을 찾을 수 없습니다."),
     SUBSCRIPTION_SCHEDULED_CHANGE_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "P025",
-            "이미 예약된 구독 변경이 있습니다.");
+            "이미 예약된 구독 변경이 있습니다."),
+    PAYMENT_AUTH_FAILED(HttpStatus.BAD_REQUEST, "P026", "결제수단 인증정보가 잘못되었습니다."),
+    INVALID_CARD_INFO(HttpStatus.BAD_REQUEST, "P027", "카드정보가 잘못되었습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
