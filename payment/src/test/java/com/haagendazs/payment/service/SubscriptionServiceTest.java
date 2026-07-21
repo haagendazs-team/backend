@@ -608,7 +608,7 @@ public class SubscriptionServiceTest {
     }
 
     @Test
-    @DisplayName("갱신 유료 구독 실패 후 결제 유예 상태 전환도 실패하면 예외를 삼킴")
+    @DisplayName("갱신 유료 구독 실패 후 연체 및 예약 취소 처리도 실패하면 예외를 삼킴")
     void renewDuePaidSubscriptionsMarkPastDueFailureTest() {
         Long memberId = 35L;
         Long workspaceId = 35L;
@@ -616,13 +616,13 @@ public class SubscriptionServiceTest {
         saveDuePaidSubscription(workspaceId, 999L, billing.getId());
         org.mockito.Mockito.doThrow(new IllegalStateException("past due update failed"))
                 .when(subscriptionService)
-                .markPastDue(workspaceId);
+                .markPastDueAndCancelScheduledPlanChanges(workspaceId);
 
         subscriptionRenewalService.renewDueSubscriptions();
 
         assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
                 .isEqualTo(SubscriptionStatus.ACTIVE);
-        verify(subscriptionService).markPastDue(workspaceId);
+        verify(subscriptionService).markPastDueAndCancelScheduledPlanChanges(workspaceId);
         verify(orderService, never()).createSubscriptionOrderWithAmount(any(), any(), any(), any());
         verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
     }
@@ -708,7 +708,7 @@ public class SubscriptionServiceTest {
         subscriptionRenewalService.renewDueSubscriptions();
 
         assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
-                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
         verify(paymentRetryJobService).scheduleRetry(memberId, order.orderNo(), billing.getId(), exception);
     }
 
@@ -726,7 +726,7 @@ public class SubscriptionServiceTest {
         subscriptionRenewalService.renewDueSubscriptions();
 
         assertThat(subscriptionsRepository.findByWorkspaceId(workspaceId).get().getStatus())
-                .isEqualTo(SubscriptionStatus.RENEWAL_PENDING);
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
         verify(paymentRetryJobService, never()).scheduleRetry(any(), any(), any(), any());
         verify(billingPaymentService, never()).paySubscriptionRenewalWithBillingMethod(any(), any(), any());
     }

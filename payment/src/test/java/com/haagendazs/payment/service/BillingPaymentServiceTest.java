@@ -43,7 +43,11 @@ import com.haagendazs.payment.payment.service.tools.TossPaymentException;
 import com.haagendazs.payment.product.entity.OrderItems;
 import com.haagendazs.payment.product.enums.ProductType;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
+import com.haagendazs.payment.subscription.entity.SubscriptionScheduledChanges;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
 import com.haagendazs.payment.subscription.enums.SubscriptionStatus;
+import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
 import com.haagendazs.payment.subscription.service.SubscriptionService;
 import java.time.LocalDateTime;
@@ -1039,19 +1043,36 @@ class BillingPaymentServiceTest {
         PaymentRetryJobRepository retryJobRepository = mock(PaymentRetryJobRepository.class);
         OrderRepository orderRepository = mock(OrderRepository.class);
         SubscriptionsRepository subscriptionsRepository = mock(SubscriptionsRepository.class);
+        SubscriptionScheduledChangesRepository scheduledChangesRepository =
+                mock(SubscriptionScheduledChangesRepository.class);
         PaymentEventProducer paymentEventProducer = mock(PaymentEventProducer.class);
         PaymentRetryJobTransactionService service = retryJobTransactionService(
                 retryJobRepository,
                 orderRepository,
                 subscriptionsRepository,
+                scheduledChangesRepository,
                 paymentEventProducer
         );
         PaymentRetryJob retryJob = retryJob(100L, PaymentRetryJobStatus.RUNNING, LocalDateTime.now(), 2);
         Orders order = processingBillingOrder();
         Subscriptions subscription = activeSubscription();
+        SubscriptionScheduledChanges scheduledChange = SubscriptionScheduledChanges.builder()
+                .subscriptionId(subscription.getId())
+                .changeType(SubscriptionChangeType.PLAN_CHANGE)
+                .changeStatus(SubscriptionChangeStatus.SCHEDULED)
+                .requestedAt(LocalDateTime.now().minusDays(1))
+                .scheduledAt(LocalDateTime.now().minusHours(1))
+                .memberId(1L)
+                .requestedPlanId(2L)
+                .build();
         when(retryJobRepository.findById(100L)).thenReturn(Optional.of(retryJob));
         when(orderRepository.findByOrderNo(ORDER_NO)).thenReturn(Optional.of(order));
         when(subscriptionsRepository.findByWorkspaceId(1L)).thenReturn(Optional.of(subscription));
+        when(scheduledChangesRepository.findBySubscriptionIdAndChangeTypeAndChangeStatus(
+                subscription.getId(),
+                SubscriptionChangeType.PLAN_CHANGE,
+                SubscriptionChangeStatus.SCHEDULED
+        )).thenReturn(List.of(scheduledChange));
 
         service.failRetryJob(100L, "REJECT_CARD_PAYMENT", "rejected");
 
@@ -1059,6 +1080,8 @@ class BillingPaymentServiceTest {
         assertThat(retryJob.getRetryCount()).isEqualTo(3);
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.FAILED);
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.EXPIRED);
+        assertThat(scheduledChange.getChangeStatus()).isEqualTo(SubscriptionChangeStatus.CANCELED);
+        assertThat(scheduledChange.getCanceledAt()).isNotNull();
         verify(paymentEventProducer).publishPaymentFailed(eq(1L), any(PaymentNotificationPayload.class));
     }
 
@@ -1889,10 +1912,27 @@ class BillingPaymentServiceTest {
             SubscriptionsRepository subscriptionsRepository,
             PaymentEventProducer paymentEventProducer
     ) {
+        return retryJobTransactionService(
+                retryJobRepository,
+                orderRepository,
+                subscriptionsRepository,
+                mock(SubscriptionScheduledChangesRepository.class),
+                paymentEventProducer
+        );
+    }
+
+    private PaymentRetryJobTransactionService retryJobTransactionService(
+            PaymentRetryJobRepository retryJobRepository,
+            OrderRepository orderRepository,
+            SubscriptionsRepository subscriptionsRepository,
+            SubscriptionScheduledChangesRepository scheduledChangesRepository,
+            PaymentEventProducer paymentEventProducer
+    ) {
         return new PaymentRetryJobTransactionService(
                 retryJobRepository,
                 orderRepository,
                 subscriptionsRepository,
+                scheduledChangesRepository,
                 paymentEventProducer
         );
     }
@@ -1975,6 +2015,7 @@ class BillingPaymentServiceTest {
 
     private Subscriptions activeSubscription() {
         return Subscriptions.builder()
+                .id(1L)
                 .subscriptionPlanId(2L)
                 .workspaceId(1L)
                 .status(SubscriptionStatus.ACTIVE)

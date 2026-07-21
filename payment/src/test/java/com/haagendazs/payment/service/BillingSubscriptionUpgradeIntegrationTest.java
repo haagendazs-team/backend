@@ -18,6 +18,7 @@ import com.haagendazs.payment.payment.service.BillingPaymentService;
 import com.haagendazs.payment.payment.service.dto.BillingPaymentRequest;
 import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
 import com.haagendazs.payment.payment.service.tools.TossBillingClient;
+import com.haagendazs.payment.payment.service.tools.TossPaymentException;
 import com.haagendazs.payment.subscription.entity.SubscriptionPeriods;
 import com.haagendazs.payment.subscription.entity.SubscriptionScheduledChanges;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
@@ -39,6 +40,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
@@ -172,6 +174,141 @@ class BillingSubscriptionUpgradeIntegrationTest {
                 });
         verify(paymentEventProducer).publishSubscriptionChanged(any(SubscriptionChangedEvent.class));
         verify(paymentEventProducer).publishWorkspaceSubscribed(any(WorkspaceSubscribedEvent.class));
+    }
+
+    @Test
+    @DisplayName("STANDARD 사용 중 Plus 업그레이드 시 19,900원을 결제하고 구독이 변경된다")
+    void standardSubscriptionUpgradeToPlus_thenFullPlusPriceIsPaid() {
+        Billing billing = defaultBilling();
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(STANDARD_PLAN_ID)
+                .workspaceId(WORKSPACE_ID)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(335))
+                .build());
+
+        ChangeSubscriptionResponse changeResponse = subscriptionService.changeSubscription(
+                MEMBER_ID,
+                WORKSPACE_ID,
+                new ChangeSubscriptionRequest(PLUS_PRODUCT_ID)
+        );
+        assertThat(changeResponse.action()).isEqualTo(SubscriptionChangeAction.PAYMENT_REQUIRED);
+        assertThat(changeResponse.amount()).isEqualTo(PLUS_RENEWAL_AMOUNT);
+        assertThat(changeResponse.orderName()).isEqualTo("Plus Subscription");
+        assertThat(changeResponse.orderType()).isEqualTo(OrderType.Billing);
+
+        String orderNo = changeResponse.orderNo();
+        Orders order = orderRepository.findByOrderNo(orderNo).orElseThrow();
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getTotalAmount()).isEqualTo(PLUS_RENEWAL_AMOUNT);
+        assertThat(order.getSubscriptionProductId()).isEqualTo(PLUS_PRODUCT_ID);
+        when(tossBillingClient.payWithBillingKey(
+                eq(billing.getBillingKey()),
+                eq("customer-key-seed-1"),
+                eq(orderNo),
+                eq(PLUS_RENEWAL_AMOUNT),
+                eq("Plus Subscription"),
+                anyString()
+        )).thenReturn(successResponse(orderNo, PLUS_RENEWAL_AMOUNT, "Plus Subscription"));
+
+        LocalDateTime beforePayment = LocalDateTime.now();
+        billingPaymentService.payWithRegisteredBillingMethod(
+                MEMBER_ID,
+                new BillingPaymentRequest(orderNo)
+        );
+
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getOrderStatus())
+                .isEqualTo(OrderStatus.PAID);
+        assertThat(paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId()).orElseThrow())
+                .satisfies(payment -> {
+                    assertThat(payment.getPaymentStatus()).isEqualTo(PaymentStatus.DONE);
+                    assertThat(payment.getTotalAmount()).isEqualTo(PLUS_RENEWAL_AMOUNT);
+                    assertThat(payment.getPaymentKey()).isEqualTo("payment-key-" + orderNo);
+                });
+
+        Subscriptions upgradedSubscription = subscriptionsRepository.findByWorkspaceId(WORKSPACE_ID).orElseThrow();
+        assertThat(upgradedSubscription.getSubscriptionPlanId()).isEqualTo(PLUS_PLAN_ID);
+        assertThat(upgradedSubscription.getBillingId()).isEqualTo(billing.getId());
+        assertThat(upgradedSubscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(upgradedSubscription.getCurrentPeriodStart()).isAfterOrEqualTo(beforePayment);
+        assertThat(upgradedSubscription.getCurrentPeriodEnd())
+                .isEqualTo(upgradedSubscription.getCurrentPeriodStart().plusDays(30));
+
+        assertThat(subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(WORKSPACE_ID))
+                .singleElement()
+                .satisfies(period -> {
+                    assertThat(period.getPlanId()).isEqualTo(PLUS_PLAN_ID);
+                    assertThat(period.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+                    assertThat(period.getPeriodStart()).isEqualTo(upgradedSubscription.getCurrentPeriodStart());
+                    assertThat(period.getPeriodEnd()).isEqualTo(upgradedSubscription.getCurrentPeriodEnd());
+                });
+        verify(paymentEventProducer).publishSubscriptionChanged(any(SubscriptionChangedEvent.class));
+        verify(paymentEventProducer).publishWorkspaceSubscribed(any(WorkspaceSubscribedEvent.class));
+    }
+
+    @Test
+    @DisplayName("결제 응답 시간이 초과되면 Toss 결제 상태를 확인해 Plus 업그레이드 DB를 보정한다")
+    void billingPaymentReadTimeout_thenQueriesTossAndReconcilesSubscription() {
+        Billing billing = defaultBilling();
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(STANDARD_PLAN_ID)
+                .workspaceId(WORKSPACE_ID)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(LocalDateTime.now().minusDays(30))
+                .currentPeriodEnd(LocalDateTime.now().plusDays(335))
+                .build());
+
+        ChangeSubscriptionResponse changeResponse = subscriptionService.changeSubscription(
+                MEMBER_ID,
+                WORKSPACE_ID,
+                new ChangeSubscriptionRequest(PLUS_PRODUCT_ID)
+        );
+        String orderNo = changeResponse.orderNo();
+        Orders order = orderRepository.findByOrderNo(orderNo).orElseThrow();
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId())).isEmpty();
+
+        when(tossBillingClient.payWithBillingKey(
+                eq(billing.getBillingKey()),
+                eq("customer-key-seed-1"),
+                eq(orderNo),
+                eq(PLUS_RENEWAL_AMOUNT),
+                eq("Plus Subscription"),
+                anyString()
+        )).thenThrow(new TossPaymentException(
+                HttpStatus.GATEWAY_TIMEOUT,
+                "TOSS_READ_TIMEOUT",
+                "토스 결제는 처리됐지만 응답 시간이 초과되었습니다."
+        ));
+        when(tossBillingClient.getPaymentByOrderId(orderNo))
+                .thenReturn(successResponse(orderNo, PLUS_RENEWAL_AMOUNT, "Plus Subscription"));
+
+        LocalDateTime beforeReconciliation = LocalDateTime.now();
+        billingPaymentService.payWithRegisteredBillingMethod(
+                MEMBER_ID,
+                new BillingPaymentRequest(orderNo)
+        );
+
+        verify(tossBillingClient).getPaymentByOrderId(orderNo);
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getOrderStatus())
+                .isEqualTo(OrderStatus.PAID);
+        assertThat(paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId()).orElseThrow())
+                .satisfies(payment -> {
+                    assertThat(payment.getPaymentStatus()).isEqualTo(PaymentStatus.DONE);
+                    assertThat(payment.getTotalAmount()).isEqualTo(PLUS_RENEWAL_AMOUNT);
+                    assertThat(payment.getPaymentKey()).isEqualTo("payment-key-" + orderNo);
+                });
+
+        Subscriptions reconciledSubscription = subscriptionsRepository
+                .findByWorkspaceId(WORKSPACE_ID)
+                .orElseThrow();
+        assertThat(reconciledSubscription.getSubscriptionPlanId()).isEqualTo(PLUS_PLAN_ID);
+        assertThat(reconciledSubscription.getBillingId()).isEqualTo(billing.getId());
+        assertThat(reconciledSubscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(reconciledSubscription.getCurrentPeriodStart()).isAfterOrEqualTo(beforeReconciliation);
+        assertThat(reconciledSubscription.getCurrentPeriodEnd())
+                .isEqualTo(reconciledSubscription.getCurrentPeriodStart().plusDays(30));
     }
 
     @Test
@@ -317,6 +454,113 @@ class BillingSubscriptionUpgradeIntegrationTest {
         verify(paymentEventProducer).publishWorkspaceSubscribed(any(WorkspaceSubscribedEvent.class));
     }
 
+    @Test
+    @DisplayName("예약된 유료 플랜 갱신 결제가 확정 실패하면 예약이 취소된다")
+    void scheduledPaidPlanRenewalDefinitiveFailure_thenScheduledChangeIsCanceled() {
+        Billing billing = defaultBilling();
+        ScheduledPlanChangeFixture fixture = saveExpiredProSubscriptionWithScheduledPlus(billing);
+        when(tossBillingClient.payWithBillingKey(
+                eq(billing.getBillingKey()),
+                eq("customer-key-seed-1"),
+                anyString(),
+                eq(PLUS_RENEWAL_AMOUNT),
+                eq("Plus Subscription"),
+                anyString()
+        )).thenThrow(new TossPaymentException(
+                HttpStatus.BAD_REQUEST,
+                "REJECT_CARD_PAYMENT",
+                "카드 결제 거절"
+        ));
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        Orders failedOrder = orderRepository
+                .findByMemberIdAndWorkspaceIdOrderByOrderedAtDesc(MEMBER_ID, WORKSPACE_ID)
+                .getFirst();
+        assertThat(failedOrder.getOrderStatus()).isEqualTo(OrderStatus.FAILED);
+        assertThat(paymentRepository.findAll()).isEmpty();
+        assertThat(subscriptionsRepository.findById(fixture.subscription().getId()).orElseThrow().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        assertThat(subscriptionScheduledChangesRepository.findById(fixture.scheduledChange().getId()).orElseThrow())
+                .satisfies(scheduledChange -> {
+                    assertThat(scheduledChange.getChangeStatus()).isEqualTo(SubscriptionChangeStatus.CANCELED);
+                    assertThat(scheduledChange.getCanceledAt()).isNotNull();
+                });
+    }
+
+    @Test
+    @DisplayName("예약된 유료 플랜 갱신 결제가 일시 실패하면 재시도를 위해 예약을 유지한다")
+    void scheduledPaidPlanRenewalTemporaryFailure_thenScheduledChangeIsKept() {
+        Billing billing = defaultBilling();
+        ScheduledPlanChangeFixture fixture = saveExpiredProSubscriptionWithScheduledPlus(billing);
+        when(tossBillingClient.payWithBillingKey(
+                eq(billing.getBillingKey()),
+                eq("customer-key-seed-1"),
+                anyString(),
+                eq(PLUS_RENEWAL_AMOUNT),
+                eq("Plus Subscription"),
+                anyString()
+        )).thenThrow(new TossPaymentException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "FAILED_INTERNAL_SYSTEM_PROCESSING",
+                "토스 일시 장애"
+        ));
+
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        Orders retryScheduledOrder = orderRepository
+                .findByMemberIdAndWorkspaceIdOrderByOrderedAtDesc(MEMBER_ID, WORKSPACE_ID)
+                .getFirst();
+        assertThat(retryScheduledOrder.getOrderStatus()).isEqualTo(OrderStatus.RETRY_SCHEDULED);
+        assertThat(subscriptionsRepository.findById(fixture.subscription().getId()).orElseThrow().getStatus())
+                .isEqualTo(SubscriptionStatus.PAST_DUE);
+        assertThat(subscriptionScheduledChangesRepository.findById(fixture.scheduledChange().getId()).orElseThrow())
+                .satisfies(scheduledChange -> {
+                    assertThat(scheduledChange.getChangeStatus()).isEqualTo(SubscriptionChangeStatus.SCHEDULED);
+                    assertThat(scheduledChange.getCanceledAt()).isNull();
+                });
+    }
+
+    @Test
+    @DisplayName("STANDARD 구독 기간 만료 시 결제 없이 STANDARD 플랜으로 갱신된다")
+    void expiredStandardSubscription_thenRenewsWithoutPayment() {
+        LocalDateTime previousPeriodStart = LocalDateTime.now().minusDays(366);
+        LocalDateTime previousPeriodEnd = LocalDateTime.now().minusDays(1);
+        subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(STANDARD_PLAN_ID)
+                .workspaceId(WORKSPACE_ID)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(previousPeriodStart)
+                .currentPeriodEnd(previousPeriodEnd)
+                .build());
+
+        LocalDateTime beforeRenewal = LocalDateTime.now();
+        subscriptionRenewalService.renewDueSubscriptions();
+
+        Subscriptions renewedSubscription = subscriptionsRepository.findByWorkspaceId(WORKSPACE_ID).orElseThrow();
+        assertThat(renewedSubscription.getSubscriptionPlanId()).isEqualTo(STANDARD_PLAN_ID);
+        assertThat(renewedSubscription.getBillingId()).isNull();
+        assertThat(renewedSubscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(renewedSubscription.getCurrentPeriodStart()).isAfterOrEqualTo(beforeRenewal);
+        assertThat(renewedSubscription.getCurrentPeriodEnd())
+                .isEqualTo(renewedSubscription.getCurrentPeriodStart().plusDays(365));
+
+        assertThat(subscriptionPeriodsRepository.findByWorkspaceIdOrderByPeriodStartDesc(WORKSPACE_ID))
+                .singleElement()
+                .satisfies(period -> {
+                    assertThat(period.getPlanId()).isEqualTo(STANDARD_PLAN_ID);
+                    assertThat(period.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+                    assertThat(period.getPeriodStart()).isEqualTo(renewedSubscription.getCurrentPeriodStart());
+                    assertThat(period.getPeriodEnd()).isEqualTo(renewedSubscription.getCurrentPeriodEnd());
+                });
+        assertThat(orderRepository.findByMemberIdAndWorkspaceIdOrderByOrderedAtDesc(MEMBER_ID, WORKSPACE_ID))
+                .isEmpty();
+        assertThat(paymentRepository.findAll()).isEmpty();
+        verifyNoInteractions(tossBillingClient);
+        verify(paymentEventProducer).publishSubscriptionChanged(any(SubscriptionChangedEvent.class));
+        verify(paymentEventProducer).publishWorkspaceSubscribed(any(WorkspaceSubscribedEvent.class));
+    }
+
     @ParameterizedTest(name = "현재 플랜 ID {0}에서 STANDARD 예약 변경")
     @ValueSource(longs = {2L, 3L})
     @DisplayName("Plus 또는 Pro 플랜 만료 시 예약된 STANDARD 플랜으로 결제 없이 변경된다")
@@ -379,6 +623,38 @@ class BillingSubscriptionUpgradeIntegrationTest {
                 MEMBER_ID,
                 com.haagendazs.payment.payment.enums.BillingStatus.ACTIVE
         ).orElseThrow();
+    }
+
+    private ScheduledPlanChangeFixture saveExpiredProSubscriptionWithScheduledPlus(Billing billing) {
+        LocalDateTime previousPeriodStart = LocalDateTime.now().minusDays(31);
+        LocalDateTime previousPeriodEnd = LocalDateTime.now().minusDays(1);
+        Subscriptions subscription = subscriptionsRepository.saveAndFlush(Subscriptions.builder()
+                .subscriptionPlanId(PRO_PLAN_ID)
+                .workspaceId(WORKSPACE_ID)
+                .status(SubscriptionStatus.ACTIVE)
+                .currentPeriodStart(previousPeriodStart)
+                .currentPeriodEnd(previousPeriodEnd)
+                .billingId(billing.getId())
+                .build());
+        SubscriptionScheduledChanges scheduledChange = subscriptionScheduledChangesRepository.saveAndFlush(
+                SubscriptionScheduledChanges.builder()
+                        .memberId(MEMBER_ID)
+                        .subscriptionId(subscription.getId())
+                        .requestedPlanId(PLUS_PLAN_ID)
+                        .changeType(SubscriptionChangeType.PLAN_CHANGE)
+                        .changeStatus(SubscriptionChangeStatus.SCHEDULED)
+                        .requestedAt(previousPeriodStart.plusDays(10))
+                        .scheduledAt(previousPeriodEnd)
+                        .build()
+        );
+
+        return new ScheduledPlanChangeFixture(subscription, scheduledChange);
+    }
+
+    private record ScheduledPlanChangeFixture(
+            Subscriptions subscription,
+            SubscriptionScheduledChanges scheduledChange
+    ) {
     }
 
     private TossBillingPaymentResponse successResponse(String orderNo) {

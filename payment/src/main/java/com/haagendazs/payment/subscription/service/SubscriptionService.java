@@ -256,6 +256,16 @@ public class SubscriptionService {
         subscription.markPastDue();
     }
 
+    // 자동 복구 경로가 없는 갱신 실패는 연체 처리하고 미적용 플랜 변경 예약을 함께 취소합니다.
+    @Transactional
+    public void markPastDueAndCancelScheduledPlanChanges(Long workspaceId) {
+        Subscriptions subscription = subscriptionsRepository.findByWorkspaceId(workspaceId)
+                .orElseThrow(() -> new BusinessException(PaymentErrorCode.SUBSCRIPTION_NOT_FOUND));
+
+        subscription.markPastDue();
+        cancelScheduledPlanChanges(subscription);
+    }
+
     // 갱신 최종 실패 또는 만료 상태로 표시합니다.
     @Transactional
     public void expireSubscription(Long workspaceId) {
@@ -456,6 +466,17 @@ public class SubscriptionService {
         if (!scheduledChanges.isEmpty()) {
             throw new BusinessException(PaymentErrorCode.SUBSCRIPTION_SCHEDULED_CHANGE_ALREADY_EXISTS);
         }
+    }
+
+    private void cancelScheduledPlanChanges(Subscriptions subscription) {
+        LocalDateTime canceledAt = LocalDateTime.now();
+        subscriptionScheduledChangesRepository
+                .findBySubscriptionIdAndChangeTypeAndChangeStatus(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                )
+                .forEach(scheduledChange -> scheduledChange.cancel(canceledAt));
     }
 
     private ScheduledPlanChangeResponse toScheduledPlanChangeResponse(

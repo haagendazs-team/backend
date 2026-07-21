@@ -11,6 +11,9 @@ import com.haagendazs.payment.payment.enums.PaymentRetryJobStatus;
 import com.haagendazs.payment.payment.repository.PaymentRetryJobRepository;
 import com.haagendazs.payment.product.entity.OrderItems;
 import com.haagendazs.payment.subscription.entity.Subscriptions;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
+import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
+import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
 import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,6 +31,7 @@ public class PaymentRetryJobTransactionService {
     private final PaymentRetryJobRepository paymentRetryJobRepository;
     private final OrderRepository orderRepository;
     private final SubscriptionsRepository subscriptionsRepository;
+    private final SubscriptionScheduledChangesRepository subscriptionScheduledChangesRepository;
     private final PaymentEventProducer paymentEventProducer;
 
     // 정기 자동결제 실패 후 재시도 작업을 예약합니다.
@@ -152,7 +156,20 @@ public class PaymentRetryJobTransactionService {
     }
 
     private void expireSubscription(Orders order) {
-        getSubscription(order).expire();
+        Subscriptions subscription = getSubscription(order);
+        subscription.expire();
+        cancelScheduledPlanChanges(subscription);
+    }
+
+    private void cancelScheduledPlanChanges(Subscriptions subscription) {
+        LocalDateTime canceledAt = LocalDateTime.now();
+        subscriptionScheduledChangesRepository
+                .findBySubscriptionIdAndChangeTypeAndChangeStatus(
+                        subscription.getId(),
+                        SubscriptionChangeType.PLAN_CHANGE,
+                        SubscriptionChangeStatus.SCHEDULED
+                )
+                .forEach(scheduledChange -> scheduledChange.cancel(canceledAt));
     }
 
     private Subscriptions getSubscription(Orders order) {

@@ -105,7 +105,7 @@ public class SubscriptionRenewalService {
         } catch (TossPaymentException e) {
             handleTossRenewalFailure(subscription, billing, order, e);
         } catch (RuntimeException e) {
-            markPastDue(subscription);
+            markPastDueAndCancelScheduledPlanChanges(subscription);
             log.warn(
                     "구독 갱신 자동결제 처리 실패 subscriptionId={} workspaceId={}",
                     subscription.getId(),
@@ -137,7 +137,7 @@ public class SubscriptionRenewalService {
             TossPaymentException exception
     ) {
         if (exception.getTossPaymentErrorCode().getAction() != TossPaymentErrorAction.RETRY_LATER) {
-            markPastDue(subscription);
+            markPastDueAndCancelScheduledPlanChanges(subscription);
             log.warn(
                     "구독 갱신 자동결제 실패 subscriptionId={} workspaceId={} tossCode={}",
                     subscription.getId(),
@@ -148,6 +148,7 @@ public class SubscriptionRenewalService {
         }
 
         if (billing == null || order == null) {
+            markPastDueAndCancelScheduledPlanChanges(subscription);
             log.warn(
                     "구독 갱신 자동결제 재시도 예약 실패 subscriptionId={} workspaceId={} reason=missing_order_or_billing",
                     subscription.getId(),
@@ -164,6 +165,7 @@ public class SubscriptionRenewalService {
                     exception
             );
         } catch (RuntimeException handlingException) {
+            markPastDueAndCancelScheduledPlanChanges(subscription);
             log.warn(
                     "구독 갱신 자동결제 실패 후 재시도 예약 처리 실패 subscriptionId={} workspaceId={}",
                     subscription.getId(),
@@ -173,12 +175,12 @@ public class SubscriptionRenewalService {
         }
     }
 
-    private void markPastDue(Subscriptions subscription) {
+    private void markPastDueAndCancelScheduledPlanChanges(Subscriptions subscription) {
         try {
-            subscriptionService.markPastDue(subscription.getWorkspaceId());
+            subscriptionService.markPastDueAndCancelScheduledPlanChanges(subscription.getWorkspaceId());
         } catch (RuntimeException e) {
             log.warn(
-                    "구독 연체 상태 전환 실패 subscriptionId={} workspaceId={}",
+                    "구독 연체 및 플랜 변경 예약 취소 실패 subscriptionId={} workspaceId={}",
                     subscription.getId(),
                     subscription.getWorkspaceId(),
                     e

@@ -4,6 +4,11 @@ import java.util.Arrays;
 
 public enum TossPaymentErrorCode {
     // 카드 자동결제 빌링키 발급 요청
+    NOT_FOUND_BILLING(
+            "NOT_FOUND_BILLING",
+            TossPaymentErrorAction.REQUIRE_BILLING_METHOD_REISSUE,
+            "존재하지 않는 빌링 결제 인증 정보 입니다."
+    ),
     INVALID_CARD_NUMBER(
             "INVALID_CARD_NUMBER",
             TossPaymentErrorAction.REQUIRE_BILLING_METHOD_REISSUE,
