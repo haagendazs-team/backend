@@ -1,55 +1,55 @@
 package com.haagendazs.payment.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.payment.global.PaymentErrorCode;
-import com.haagendazs.payment.global.kafka.PaymentEventProducer;
-import com.haagendazs.payment.global.kafka.dto.PaymentNotificationPayload;
-import com.haagendazs.payment.order.entity.Orders;
-import com.haagendazs.payment.order.enums.OrderStatus;
-import com.haagendazs.payment.order.enums.OrderType;
-import com.haagendazs.payment.order.repository.OrderRepository;
-import com.haagendazs.payment.payment.entity.Billing;
-import com.haagendazs.payment.payment.entity.PaymentCustomerKey;
-import com.haagendazs.payment.payment.entity.PaymentRetryJob;
-import com.haagendazs.payment.payment.entity.Payments;
-import com.haagendazs.payment.payment.enums.BillingStatus;
-import com.haagendazs.payment.payment.enums.CardCompany;
-import com.haagendazs.payment.payment.enums.CardType;
-import com.haagendazs.payment.payment.enums.OwnerType;
-import com.haagendazs.payment.payment.enums.PaymentRetryJobStatus;
-import com.haagendazs.payment.payment.enums.PaymentStatus;
-import com.haagendazs.payment.payment.repository.BillingRepository;
-import com.haagendazs.payment.payment.repository.PaymentCustomerKeyRepository;
-import com.haagendazs.payment.payment.repository.PaymentRepository;
-import com.haagendazs.payment.payment.repository.PaymentRetryJobRepository;
-import com.haagendazs.payment.payment.service.BillingCheckoutService;
-import com.haagendazs.payment.payment.service.BillingMethodService;
-import com.haagendazs.payment.payment.service.BillingPaymentService;
-import com.haagendazs.payment.payment.service.BillingPaymentTransactionService;
-import com.haagendazs.payment.payment.service.PaymentCustomerKeyService;
-import com.haagendazs.payment.payment.service.PaymentRetryJobService;
-import com.haagendazs.payment.payment.service.PaymentRetryJobScheduler;
-import com.haagendazs.payment.payment.service.PaymentRetryJobTransactionService;
-import com.haagendazs.payment.payment.service.dto.BillingMethodIssueAndPayRequest;
-import com.haagendazs.payment.payment.service.dto.BillingMethodIssueRequest;
-import com.haagendazs.payment.payment.service.dto.BillingPaymentRequest;
-import com.haagendazs.payment.payment.service.dto.TossBillingKeyIssueResponse;
-import com.haagendazs.payment.payment.service.dto.TossBillingPaymentResponse;
-import com.haagendazs.payment.payment.service.tools.CustomerKeyEncryptor;
-import com.haagendazs.payment.payment.service.tools.CustomerKeyHashEncoder;
-import com.haagendazs.payment.payment.service.tools.TossBillingClient;
-import com.haagendazs.payment.payment.service.tools.TossCustomerKeyGenerator;
-import com.haagendazs.payment.payment.service.tools.TossPaymentException;
-import com.haagendazs.payment.product.entity.OrderItems;
-import com.haagendazs.payment.product.enums.ProductType;
-import com.haagendazs.payment.subscription.entity.Subscriptions;
-import com.haagendazs.payment.subscription.entity.SubscriptionScheduledChanges;
-import com.haagendazs.payment.subscription.enums.SubscriptionChangeStatus;
-import com.haagendazs.payment.subscription.enums.SubscriptionChangeType;
-import com.haagendazs.payment.subscription.enums.SubscriptionStatus;
-import com.haagendazs.payment.subscription.repository.SubscriptionScheduledChangesRepository;
-import com.haagendazs.payment.subscription.repository.SubscriptionsRepository;
-import com.haagendazs.payment.subscription.service.SubscriptionService;
+import com.haagendazs.domain.exception.PaymentErrorCode;
+import com.haagendazs.infrastructure.kafka.PaymentEventProducer;
+import com.haagendazs.infrastructure.kafka.dto.PaymentNotificationPayload;
+import com.haagendazs.domain.model.Orders;
+import com.haagendazs.domain.model.OrderStatus;
+import com.haagendazs.domain.model.OrderType;
+import com.haagendazs.domain.repository.OrderRepository;
+import com.haagendazs.domain.model.Billing;
+import com.haagendazs.domain.model.PaymentCustomerKey;
+import com.haagendazs.domain.model.PaymentRetryJob;
+import com.haagendazs.domain.model.Payments;
+import com.haagendazs.domain.model.BillingStatus;
+import com.haagendazs.domain.model.CardCompany;
+import com.haagendazs.domain.model.CardType;
+import com.haagendazs.domain.model.OwnerType;
+import com.haagendazs.domain.model.PaymentRetryJobStatus;
+import com.haagendazs.domain.model.PaymentStatus;
+import com.haagendazs.domain.repository.BillingRepository;
+import com.haagendazs.domain.repository.PaymentCustomerKeyRepository;
+import com.haagendazs.domain.repository.PaymentRepository;
+import com.haagendazs.domain.repository.PaymentRetryJobRepository;
+import com.haagendazs.application.service.BillingCheckoutService;
+import com.haagendazs.application.service.BillingMethodService;
+import com.haagendazs.application.service.BillingPaymentService;
+import com.haagendazs.application.service.BillingPaymentTransactionService;
+import com.haagendazs.application.service.PaymentCustomerKeyService;
+import com.haagendazs.application.service.PaymentRetryJobService;
+import com.haagendazs.infrastructure.scheduler.PaymentRetryJobScheduler;
+import com.haagendazs.application.service.PaymentRetryJobTransactionService;
+import com.haagendazs.application.dto.BillingMethodIssueAndPayRequest;
+import com.haagendazs.application.dto.BillingMethodIssueRequest;
+import com.haagendazs.application.dto.BillingPaymentRequest;
+import com.haagendazs.application.dto.TossBillingKeyIssueResponse;
+import com.haagendazs.application.dto.TossBillingPaymentResponse;
+import com.haagendazs.infrastructure.security.CustomerKeyEncryptor;
+import com.haagendazs.infrastructure.security.CustomerKeyHashEncoder;
+import com.haagendazs.infrastructure.toss.TossBillingClient;
+import com.haagendazs.infrastructure.security.TossCustomerKeyGenerator;
+import com.haagendazs.infrastructure.toss.TossPaymentException;
+import com.haagendazs.domain.model.OrderItems;
+import com.haagendazs.domain.model.ProductType;
+import com.haagendazs.domain.model.Subscriptions;
+import com.haagendazs.domain.model.SubscriptionScheduledChanges;
+import com.haagendazs.domain.model.SubscriptionChangeStatus;
+import com.haagendazs.domain.model.SubscriptionChangeType;
+import com.haagendazs.domain.model.SubscriptionStatus;
+import com.haagendazs.domain.repository.SubscriptionScheduledChangesRepository;
+import com.haagendazs.domain.repository.SubscriptionsRepository;
+import com.haagendazs.application.service.SubscriptionService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -71,6 +71,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -96,6 +97,21 @@ class BillingPaymentServiceTest {
                 tossBillingClient,
                 billingPaymentTransactionService
         );
+        org.mockito.Mockito.lenient().when(billing.isActive()).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("billing 결제 - 비활성 결제수단이면 결제 준비와 Toss 호출 없이 종료")
+    void payCheckoutWithNonActiveBillingMethodStopsImmediatelyTest() {
+        when(billing.isActive()).thenReturn(false);
+
+        assertThatThrownBy(() -> billingPaymentService.payCheckoutWithBillingMethod(
+                MEMBER_ID,
+                ORDER_NO,
+                billing
+        )).extracting("errorCode").isEqualTo(PaymentErrorCode.BILLING_METHOD_NOT_FOUND);
+
+        verifyNoInteractions(billingPaymentTransactionService, tossBillingClient);
     }
 
     @Test

@@ -1,28 +1,28 @@
 package com.haagendazs.payment.service;
 
 import com.haagendazs.common.exception.BusinessException;
-import com.haagendazs.payment.TestPaymentApplication;
-import com.haagendazs.payment.global.PaymentErrorCode;
-import com.haagendazs.payment.order.entity.Orders;
-import com.haagendazs.payment.order.enums.OrderStatus;
-import com.haagendazs.payment.order.enums.OrderType;
-import com.haagendazs.payment.order.repository.OrderRepository;
-import com.haagendazs.payment.order.service.OrderService;
-import com.haagendazs.payment.order.service.dto.OrderCreateRequest;
-import com.haagendazs.payment.order.service.dto.OrderCreateResponse;
-import com.haagendazs.payment.order.service.dto.OrderDetailResponse;
-import com.haagendazs.payment.order.service.dto.OrderListResponse;
-import com.haagendazs.payment.payment.entity.Payments;
-import com.haagendazs.payment.payment.enums.CardCompany;
-import com.haagendazs.payment.payment.enums.PaymentMethod;
-import com.haagendazs.payment.payment.enums.PaymentProvider;
-import com.haagendazs.payment.payment.enums.PaymentStatus;
-import com.haagendazs.payment.payment.repository.PaymentRepository;
-import com.haagendazs.payment.payment.service.PaymentCustomerKeyService;
-import com.haagendazs.payment.product.entity.Products;
-import com.haagendazs.payment.product.enums.ProductStatus;
-import com.haagendazs.payment.product.enums.ProductType;
-import com.haagendazs.payment.product.repository.ProductsRepository;
+import com.haagendazs.TestPaymentApplication;
+import com.haagendazs.domain.exception.PaymentErrorCode;
+import com.haagendazs.domain.model.Orders;
+import com.haagendazs.domain.model.OrderStatus;
+import com.haagendazs.domain.model.OrderType;
+import com.haagendazs.domain.repository.OrderRepository;
+import com.haagendazs.application.service.OrderService;
+import com.haagendazs.application.dto.OrderCreateRequest;
+import com.haagendazs.application.dto.OrderCreateResponse;
+import com.haagendazs.application.dto.OrderDetailResponse;
+import com.haagendazs.application.dto.OrderListResponse;
+import com.haagendazs.domain.model.Payments;
+import com.haagendazs.domain.model.CardCompany;
+import com.haagendazs.domain.model.PaymentMethod;
+import com.haagendazs.domain.model.PaymentProvider;
+import com.haagendazs.domain.model.PaymentStatus;
+import com.haagendazs.domain.repository.PaymentRepository;
+import com.haagendazs.application.service.PaymentCustomerKeyService;
+import com.haagendazs.domain.model.Products;
+import com.haagendazs.domain.model.ProductStatus;
+import com.haagendazs.domain.model.ProductType;
+import com.haagendazs.domain.repository.ProductsRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -535,7 +535,7 @@ public class OrderServiceTest {
                 .orderedAt(LocalDateTime.now())
                 .expiredAt(LocalDateTime.now().plusMinutes(30))
                 .build();
-        existingOrder.addOrderItem(com.haagendazs.payment.product.entity.OrderItems.builder()
+        existingOrder.addOrderItem(com.haagendazs.domain.model.OrderItems.builder()
                 .productId(2L)
                 .itemName("Plus Subscription")
                 .itemType(ProductType.SUBSCRIPTION.name())

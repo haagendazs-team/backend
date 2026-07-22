@@ -1,8 +1,8 @@
-package com.haagendazs.payment.global.kafka;
+package com.haagendazs.infrastructure.kafka;
 
-import com.haagendazs.payment.TestPaymentApplication;
-import com.haagendazs.payment.global.kafka.dto.WorkspaceCreatedEvent;
-import com.haagendazs.payment.subscription.service.SubscriptionService;
+import com.haagendazs.TestPaymentApplication;
+import com.haagendazs.infrastructure.kafka.dto.WorkspaceCreatedEvent;
+import com.haagendazs.application.service.SubscriptionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

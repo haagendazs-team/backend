@@ -114,14 +114,10 @@ jacocoTestReport {
     afterEvaluate {
         classDirectories.setFrom(files(classDirectories.files.collect {
             fileTree(dir: it, include: [
-                'com/haagendazs/payment/**/service/**',
-                'com/haagendazs/payment/**/entity/**',
+                'com/haagendazs/application/service/**',
+                'com/haagendazs/domain/model/**',
             ], exclude: [
-                'com/haagendazs/payment/**/service/dto/**',
-                'com/haagendazs/payment/**/service/tools/TossBillingClient.class',
-                'com/haagendazs/payment/**/service/tools/TossPaymentConfig.class',
-                'com/haagendazs/payment/**/global/SubscriptionExpirationScheduler.class',
-                'com/haagendazs/payment/**/Q*.class',
+                'com/haagendazs/domain/model/Q*.class',
             ])
         }))
     }

@@ -1,6 +1,6 @@
-package com.haagendazs.payment.payment.service;
+package com.haagendazs.application.service;
 
-import com.haagendazs.payment.TestPaymentApplication;
+import com.haagendazs.TestPaymentApplication;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
