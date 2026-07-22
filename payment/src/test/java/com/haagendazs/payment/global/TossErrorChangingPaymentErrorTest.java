@@ -1,5 +1,7 @@
-package com.haagendazs.domain.exception;
+package com.haagendazs.payment.global;
 
+import com.haagendazs.domain.exception.PaymentErrorCode;
+import com.haagendazs.domain.exception.TossErrorChangingPaymentError;
 import com.haagendazs.domain.model.TossPaymentErrorCode;
 import org.junit.jupiter.api.Test;
 

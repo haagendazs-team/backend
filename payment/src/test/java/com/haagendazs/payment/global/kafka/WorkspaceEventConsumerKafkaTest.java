@@ -1,4 +1,4 @@
-package com.haagendazs.infrastructure.kafka;
+package com.haagendazs.payment.global.kafka;
 
 import com.haagendazs.TestPaymentApplication;
 import com.haagendazs.infrastructure.kafka.dto.WorkspaceCreatedEvent;

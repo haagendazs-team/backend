@@ -19,6 +19,7 @@ spring:
   sql:
     init:
       mode: always
+      data-locations: classpath:data.sql
   flyway:
     enabled: false
   kafka:
@@ -48,6 +49,8 @@ eureka:
     enabled: false
 
 payment:
+  seed-data:
+    enabled: false
   customer-key:
     hash-secret: test-customer-key-hash-secret
     encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=

@@ -1,7 +1,8 @@
-package com.haagendazs.infrastructure.toss;
+package com.haagendazs.payment.payment.service.tools;
 
 import com.haagendazs.domain.exception.PaymentErrorCode;
 import com.haagendazs.domain.model.TossPaymentErrorCode;
+import com.haagendazs.infrastructure.toss.TossPaymentException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 

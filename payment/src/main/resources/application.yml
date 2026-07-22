@@ -16,9 +16,8 @@ spring:
       minimum-idle: ${HIKARI_MIN_IDLE:2}
   jpa:
     hibernate:
-      # TODO: Flyway 테이블 migration이 준비되면 validate로 되돌리기
-      # ddl-auto: validate
-      ddl-auto: create-drop
+      # TODO: Flyway 테이블 migration이 준비되면 validate로 전환하기
+      ddl-auto: update
     open-in-view: false
   flyway:
     locations: classpath:db/migration
@@ -62,6 +61,8 @@ eureka:
     prefer-ip-address: true
 
 payment:
+  seed-data:
+    enabled: true
   customer-key:
     hash-secret: local-customer-key-hash-secret #${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
     encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= #${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}

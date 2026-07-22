@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
 import com.haagendazs.TestPaymentApplication;
-import com.haagendazs.infrastructure.kafka.PaymentEventProducer;
 import com.haagendazs.infrastructure.kafka.dto.PaymentNotificationPayload;
 import com.haagendazs.infrastructure.kafka.dto.SubscriptionChangedEvent;
 import com.haagendazs.infrastructure.kafka.dto.SubscriptionInitializedEvent;
@@ -267,9 +266,9 @@ class PaymentToNotificationKafkaTest {
 
     private Consumer<String, String> createConsumer(String groupId) {
         Map<String, Object> consumerProps = KafkaTestUtils.consumerProps(
+                embeddedKafkaBroker,
                 groupId,
-                "true",
-                embeddedKafkaBroker
+                true
         );
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         return new DefaultKafkaConsumerFactory<>(

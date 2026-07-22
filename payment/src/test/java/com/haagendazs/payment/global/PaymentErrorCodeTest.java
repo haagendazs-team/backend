@@ -1,5 +1,6 @@
-package com.haagendazs.domain.exception;
+package com.haagendazs.payment.global;
 
+import com.haagendazs.domain.exception.PaymentErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
