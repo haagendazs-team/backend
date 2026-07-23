@@ -17,14 +17,10 @@
 #   DB_NAME       — 데이터베이스 이름         (기본: sportsify)
 #   DB_USER       — DB 사용자                (기본: sportsify)
 #
-# OS 사전 설정 (3K 실행 시 필수):
-#   macOS:
-#     ulimit -n 131072
-#     sudo sysctl -w kern.maxfilesperproc=131072
-#     sudo sysctl -w kern.maxfiles=131072
-#   Linux:
-#     ulimit -n 131072
-#     sudo sysctl -w fs.file-max=200000
+# OS 사전 설정 (6K 실행 시 필수):
+#   ulimit -n 131072
+#   sudo sysctl -w kern.maxfilesperproc=131072
+#   sudo sysctl -w kern.maxfiles=131072
 
 set -euo pipefail
 
@@ -66,14 +62,9 @@ check_fd_limit() {
         echo "╔══════════════════════════════════════════════════════════════╗"
         echo "║  경고: OS fd 한계 부족 (현재: ${current_limit}, 필요: ${required}+)       ║"
         echo "║                                                              ║"
-        echo "║  macOS:                                                      ║"
-        echo "║    ulimit -n 131072     * 2                                       ║"
-        echo "║    sudo sysctl -w kern.maxfilesperproc=131072                 ║"
-        echo "║    sudo sysctl -w kern.maxfiles=131072                        ║"
-        echo "║                                                              ║"
-        echo "║  Linux:                                                      ║"
-        echo "║    ulimit -n 131072                                           ║"
-        echo "║    sudo sysctl -w fs.file-max=200000                         ║"
+        echo "║    ulimit -n 131072                                          ║"
+        echo "║    sudo sysctl -w kern.maxfilesperproc=131072                ║"
+        echo "║    sudo sysctl -w kern.maxfiles=131072                       ║"
         echo "║                                                              ║"
         echo "║  이 상태로 실행하면 연결 실패가 서버 문제처럼 보입니다.     ║"
         echo "╚══════════════════════════════════════════════════════════════╝"
@@ -111,9 +102,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# sustain-direct, sse-v2-poc, send: DB seed / 토큰 불필요
-# send — /module/notifications/publish 는 내부 API (인증 없음), memberId는 계산으로 생성
-if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]] && [[ "$TARGET" != "send" ]]; then
+# send / receive: X-Member-Id 직접 연결 — DB seed / 토큰 불필요
+SSE_VUS="${SSE_VUS:-6000}"
+RECEIVER_VUS="${RECEIVER_VUS:-500}"
+
+if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]] && \
+   [[ "$TARGET" != "send" ]] && [[ "$TARGET" != "receive" ]]; then
 
 # ── seed ──────────────────────────────────────────────────────
 echo "▶ [seed] seed.sql 실행 중... (VUS=$VUS, SEED_OFFSET=$SEED_OFFSET)"
@@ -279,10 +273,10 @@ case "$TARGET" in
         run_k6 sustain-direct.js -e MAX_VUS="$SUSTAIN_MAX_VUS" -e START_VUS="$SUSTAIN_START_VUS"
         ;;
     send)
-        run_k6 send.js
+        run_k6 send.js -e SSE_VUS="$SSE_VUS" -e K6_SEED_OFFSET="$SEED_OFFSET"
         ;;
     receive)
-        run_k6 receive.js --log-output=none
+        run_k6 receive.js -e RECEIVER_VUS="$RECEIVER_VUS" -e K6_SEED_OFFSET="$SEED_OFFSET"
         ;;
     all)
         run_k6 all.js --log-output=none
