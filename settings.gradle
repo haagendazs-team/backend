@@ -7,7 +7,6 @@ include(
     'common',
     'notification',
     'chat',
-    'search',
     'payment',
     'member'
 )

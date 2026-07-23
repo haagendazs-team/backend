@@ -24,6 +24,14 @@ spring:
     # 서비스 전용 스키마에서 히스토리 테이블 관리 (타 서비스와 충돌 방지)
     schemas: member
     table: flyway_schema_history
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+      retries: 3
 
 management:
   endpoints:
@@ -40,3 +48,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration-ms: ${JWT_ACCESS_EXPIRATION_MS:1800000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:3600000}

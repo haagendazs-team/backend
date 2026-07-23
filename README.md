@@ -2,7 +2,7 @@
 
 ---
 
-> **Haagendazs**는 클라우드 협업 플랫폼입니다.  <br />
+> **Haagendazs**는 클라우드 협업 채팅 플랫폼입니다.  <br />
 > 개발 기간: 2026.06.24 ~ 2026.07.24(1달)
 
 ## _intro._
@@ -38,7 +38,6 @@
 | Database          | PostgreSQL 18 (R2DBC + JDBC/Flyway)       |
 | Cache / Pub-Sub   | Redis 8                                   |
 | Message Broker    | Apache Kafka 4.0 (KRaft)                  |
-| Search            | Elasticsearch 8.13                        |
 | Service Discovery | Eureka (Spring Cloud Netflix)             |
 | API Gateway       | Spring Cloud Gateway                      |
 | Build             | Gradle (Multi-module)                     |
@@ -73,11 +72,6 @@ Gateway :8080  (JWT 검증 · Rate Limit · 라우팅)
 
 Boot order: config-server → discovery → [services]
 ```
-
-### _AWS Scale-Out._
-
-EC2 + Auto Scaling Group 기반. 기본 인스턴스 1개, 부하에 따라 선택적 확장.  
-자세한 내용 → [docs/aws-scale-out-architecture.md](docs/aws-scale-out-architecture.md)
 
 ---
 

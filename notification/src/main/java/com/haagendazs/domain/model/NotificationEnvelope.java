@@ -1,6 +1,7 @@
 package com.haagendazs.domain.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ public record NotificationEnvelope(
     @JsonCreator
     public static NotificationEnvelope of(
             @JsonProperty("memberId") Long memberId,
+            @JsonAlias({"DispatchType", "dispatchType"})
             @JsonProperty("isDispatchType") DispatchType isDispatchType,
             @JsonProperty("scheduledAt") LocalDateTime scheduledAt,
             @JsonProperty("payload") Object payload

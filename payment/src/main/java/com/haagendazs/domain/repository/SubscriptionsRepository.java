@@ -1,0 +1,57 @@
+package com.haagendazs.domain.repository;
+
+import com.haagendazs.domain.model.SubscriptionPeriods;
+import com.haagendazs.domain.model.Subscriptions;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SubscriptionsRepository extends JpaRepository<Subscriptions, Long> {
+
+    boolean existsByWorkspaceId(Long workspaceId);
+    Optional<Subscriptions> findByWorkspaceId(Long workspaceId);
+
+    @Query("""
+        select s
+        from Subscriptions s
+        where s.status = 'ACTIVE'
+          and s.currentPeriodEnd <= :now
+          and s.subscriptionPlanId <> :normalPlanId
+    """)
+    List<Subscriptions> findExpiredPaidSubscriptions(
+            @Param("now") LocalDateTime now,
+            @Param("normalPlanId") Long normalPlanId
+    );
+
+    @Query("""
+        select s
+        from Subscriptions s
+        where s.status in ('ACTIVE', 'EXPIRED')
+          and s.currentPeriodEnd <= :now
+          and s.subscriptionPlanId = :standardPlanId
+    """)
+    List<Subscriptions> findRenewalDueStandardSubscriptions(
+            @Param("now") LocalDateTime now,
+            @Param("standardPlanId") Long standardPlanId
+    );
+
+    @Query("""
+        select s
+        from Subscriptions s
+        where s.status = 'ACTIVE'
+          and s.currentPeriodEnd <= :now
+          and s.subscriptionPlanId <> :standardPlanId
+          and s.billingId is not null
+    """)
+    List<Subscriptions> findRenewalDuePaidSubscriptions(
+            @Param("now") LocalDateTime now,
+            @Param("standardPlanId") Long standardPlanId
+    );
+}

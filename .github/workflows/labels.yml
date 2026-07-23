@@ -25,7 +25,7 @@ jobs:
           REPO: ${{ github.repository }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          ALL_MODULES="config-server discovery gateway member payment search notification chat common"
+          ALL_MODULES="config-server discovery gateway member payment notification chat common"
 
           CHANGED_FILES=$(git diff "$BASE"...HEAD --name-only)
           echo "Changed files:"
