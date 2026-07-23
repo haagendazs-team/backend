@@ -7,7 +7,6 @@ import com.haagendazs.application.port.SseNotificationPort;
 import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.domain.repository.EventRepository;
 import com.haagendazs.domain.repository.SettingEntryRepository;
-import java.util.List;
 import com.haagendazs.domain.repository.NotificationRepository;
 import com.haagendazs.presentation.dto.NotificationResponse;
 import lombok.RequiredArgsConstructor;
@@ -37,10 +36,6 @@ public class NotificationService {
                         .map(event -> NotificationResult.of(notification, event)));
     }
 
-    public Mono<Long> countNotifications(Long memberId) {
-        return notificationRepository.countByMemberId(memberId);
-    }
-
     @Transactional
     public Mono<Void> markRead(Long memberId, Long notificationId) {
         return notificationRepository.findByIdAndMemberId(notificationId, memberId)
@@ -67,7 +62,7 @@ public class NotificationService {
                         .flatMap(entries -> settingCachePort.putAll(memberId, entries)));
 
         return cacheWarmup
-                .thenMany(sseNotificationPort.subscribe(memberId, List.of(), buildReplay(memberId, lastEventId)));
+                .thenMany(sseNotificationPort.subscribe(memberId, buildReplay(memberId, lastEventId)));
     }
 
     private Flux<ServerSentEvent<Object>> buildReplay(Long memberId, Long lastEventId) {
