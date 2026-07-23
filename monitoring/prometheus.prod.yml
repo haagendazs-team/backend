@@ -27,12 +27,6 @@ scrape_configs:
       - targets:
           - payment:8083
 
-  - job_name: search
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets:
-          - search:8084
-
   - job_name: chat
     metrics_path: /actuator/prometheus
     static_configs:

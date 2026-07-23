@@ -31,7 +31,7 @@ jobs:
       - name: Detect changed modules
         id: changed
         run: |
-          ALL_MODULES="config-server discovery gateway member payment search notification chat common"
+          ALL_MODULES="config-server discovery gateway member payment notification chat common"
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE=${{ github.event.pull_request.base.sha }}

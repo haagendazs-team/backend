@@ -12,7 +12,6 @@ Spring Boot 4.0 기반 MSA 백엔드 프로젝트
 | Database | PostgreSQL 18 |
 | Cache / Pub-Sub | Redis 8 |
 | Message Broker | Apache Kafka 4.0 (KRaft) |
-| Search | Elasticsearch 8.13 |
 | Service Discovery | Eureka (Spring Cloud Netflix) |
 | API Gateway | Spring Cloud Gateway |
 | Build | Gradle (Multi-module) |
@@ -26,12 +25,11 @@ Spring Boot 4.0 기반 MSA 백엔드 프로젝트
 | `gateway` | 8080 | API Gateway (JWT 검증, 라우팅) |
 | `member` | 8084 | 회원 서비스 |
 | `payment` | 8083 | 결제 서비스 |
-| `search` | 8082 | 검색 서비스 (Elasticsearch) |
 | `notification` | 8081 | 알림 서비스 (SSE, Redis Streams, Kafka) |
 | `chat` | 8085 | 채팅 서비스 (R2DBC, Redis) |
 | `common` | — | 공통 예외·응답 모듈 |
 
-> `member`, `payment`, `search`, `notification`, `chat`은 스케일아웃 가능 (`container_name`, `ports` 미사용)
+> `member`, `payment`, `notification`, `chat`은 스케일아웃 가능 (`container_name`, `ports` 미사용)
 
 ## 로컬 실행
 
@@ -158,7 +156,6 @@ Gateway (8080) ── JWT 검증                          [Blue/Green]
   │
   ├── member       (8084) ── PostgreSQL ── Kafka    [Rolling]
   ├── payment      (8083) ── PostgreSQL ── Kafka    [Rolling]
-  ├── search       (8082) ── PostgreSQL ── Elasticsearch ── Kafka  [Rolling]
   ├── notification (8081) ── PostgreSQL ── Redis (Streams + Pub/Sub) ── Kafka  [Rolling + Drain]
   └── chat         (8085) ── PostgreSQL ── Redis ── Kafka          [Rolling + Drain]
 
@@ -176,7 +173,7 @@ Gateway (8080) ── JWT 검증                          [Blue/Green]
 |--------|------|------|
 | `config-server` / `discovery` | Blue/Green | 전체 서비스가 의존 — 순단 시 연쇄 장애 위험 |
 | `gateway` | Blue/Green | 라우팅 룰 변경은 전/후 명확히 달라 롤백 단위 필요 |
-| `member` / `payment` / `search` | Rolling | 무상태에 가까운 비즈니스 로직 — 하위 호환 DB 마이그레이션 전제 |
+| `member` / `payment` | Rolling | 무상태에 가까운 비즈니스 로직 — 하위 호환 DB 마이그레이션 전제 |
 | `notification` / `chat` | Rolling + Connection Drain | SSE·WebSocket 연결 유지 필요 — 기존 연결 소진 후 인스턴스 종료 |
 
 ## Config Server

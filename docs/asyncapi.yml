@@ -20,7 +20,7 @@ servers:
 channels:
   notif.events:
     description: |
-      외부 서비스(member, payment, search 등)가 알림 이벤트를 발행하는 Kafka 토픽.
+      외부 서비스(member, payment 등)가 알림 이벤트를 발행하는 Kafka 토픽.
       notification 서비스의 KafkaNotificationConsumer가 구독하여 Redis Stream으로 포워딩한다.
     subscribe:
       operationId: onNotifEvent

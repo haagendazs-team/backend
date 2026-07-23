@@ -2,7 +2,7 @@
 set -euo pipefail
 
 COMPOSE_FILE="docker-compose.local.yml"
-SCALABLE_SERVICES="member payment search notification chat"
+SCALABLE_SERVICES="member payment notification chat"
 
 usage() {
     cat <<EOF
@@ -100,7 +100,7 @@ cmd_service() {
 
     local deps="config-server discovery"
     case "$service" in
-        member|payment|search)
+        member|payment)
             deps="$deps postgres kafka" ;;
         notification)
             deps="$deps postgres redis kafka" ;;
