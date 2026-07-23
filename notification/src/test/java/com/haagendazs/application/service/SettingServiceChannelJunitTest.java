@@ -21,6 +21,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -156,5 +158,23 @@ class SettingServiceChannelJunitTest {
 
         assertThat(result).isNotNull();
         assertThat(result.enabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("registerChannel — DataIntegrityViolationException이면 ALREADY_EXISTS로 변환된다")
+    void registerChannel_dataIntegrityViolation_mapsToAlreadyExists() {
+        when(channelRepository.existsByMemberIdAndChannelType(1L, ChannelType.EMAIL)).thenReturn(Mono.just(false));
+        when(channelRepository.countByMemberId(1L)).thenReturn(Mono.just(0L));
+        when(properties.channel()).thenReturn(channelProperties);
+        when(channelProperties.maxPerMember()).thenReturn(2);
+        when(channelRepository.save(any()))
+                .thenReturn(Mono.error(new DataIntegrityViolationException("uk violation")));
+
+        Mono<ChannelResult> result = settingService.registerChannel(1L, ChannelType.EMAIL, "a@b.com");
+
+        assertThatThrownBy(result::block)
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                        .isEqualTo(NotificationErrorCode.NOTIFICATION_CHANNEL_ALREADY_EXISTS));
     }
 }

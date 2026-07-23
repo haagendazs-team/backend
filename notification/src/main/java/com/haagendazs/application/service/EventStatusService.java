@@ -23,7 +23,7 @@ public class EventStatusService {
     private final NotificationProperties properties;
 
     public Mono<Event> saveEventWithStreamMessageId(EventTypeDefinition definition,
-                                                     String payload, String streamMessageId) {
+                                                    String payload, String streamMessageId) {
         return eventRepository.findByStreamMessageId(streamMessageId)
                 .switchIfEmpty(Mono.defer(() -> {
                     Event event = buildEvent(definition, payload);
@@ -42,10 +42,8 @@ public class EventStatusService {
     private Event buildEvent(EventTypeDefinition definition, String payload) {
         NotificationEnvelope envelope = payloadParser.parse(payload);
         Optional<LocalDateTime> scheduledAt = payloadParser.extractScheduledAt(envelope);
-        if (scheduledAt.isPresent()) {
-            return Event.createScheduled(definition.getCode(), payload, scheduledAt.get());
-        }
-        return Event.create(definition.getCode(), payload);
+        return scheduledAt.map(localDateTime -> Event.createScheduled(definition.getCode(), payload, localDateTime))
+                .orElseGet(() -> Event.create(definition.getCode(), payload));
     }
 
     private Mono<Event> applyStatus(Event event, boolean anyFailed) {

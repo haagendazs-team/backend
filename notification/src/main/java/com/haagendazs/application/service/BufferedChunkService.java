@@ -35,8 +35,7 @@ public class BufferedChunkService {
         }
 
         return notificationRepository.findExistingMemberIdsByEventId(event.getId(), memberIds)
-                .flatMap(alreadyNotified ->
-                        settingEntryRepository.findDisabledMemberIdsByEventTypeCode(memberIds, event.getEventTypeCode())
+                .flatMap(alreadyNotified -> settingEntryRepository.findDisabledMemberIdsByEventTypeCode(memberIds, event.getEventTypeCode())
                                 .collect(Collectors.toSet())
                                 .flatMap(disabledIds -> buildAndEnqueue(
                                         event, memberIds, payload, streamKey, recordId, alreadyNotified, disabledIds)));
@@ -55,7 +54,7 @@ public class BufferedChunkService {
 
         return Flux.fromIterable(candidates)
                 .flatMap(memberId -> sseNotificationPort.isConnected(memberId)
-                        .map(connected -> new MemberConnectionState(memberId, connected)))
+                        .map(connected -> new MemberConnectionState(memberId, connected)), 32)
                 .collectList()
                 .flatMap(states -> {
                     List<Notification> ssePending = states.stream()

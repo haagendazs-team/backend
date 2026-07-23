@@ -30,6 +30,15 @@ public class EventTypeDefinition implements Persistable<String> {
     @Column("is_enabled")
     private boolean enabled;
 
+    @Column("display_name")
+    private String displayName;
+
+    @Column("description")
+    private String description;
+
+    @Column("category")
+    private String category;
+
     @CreatedDate
     @Column("created_at")
     private LocalDateTime createdAt;
@@ -48,6 +57,15 @@ public class EventTypeDefinition implements Persistable<String> {
         def.singleTarget = isSingleTarget;
         def.enabled = true;
         def.newEntity = true;
+        return def;
+    }
+
+    public static EventTypeDefinition of(String code, boolean isScheduled, boolean isSingleTarget,
+                                         String displayName, String description, String category) {
+        EventTypeDefinition def = of(code, isScheduled, isSingleTarget);
+        def.displayName = displayName;
+        def.description = description;
+        def.category = category;
         return def;
     }
 
