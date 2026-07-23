@@ -1,20 +1,13 @@
 -- k6 알림 부하 테스트 시드 데이터
 -- run.sh 가 -v vus=N -v seed_offset=M 으로 주입
---
--- 시나리오별 역할:
---   01-sse-connect  : VU 1~VUS → memberId = seed_offset + (VU % VUS)
---   02-sse-send     : /dev/events/publish 로 XADD (DB seed 불필요)
---   03-sse-receive  : receivers(VU 1~200) + triggers(memberId 순환)
--- ─────────────────────────────────────────────────────────────────
 
--- notification_settings — 전체 알림 ON
-INSERT INTO notification_settings (member_id, ticket_open_alert, game_start_alert, payment_alert, chat_mention_alert, updated_at)
+-- setting_entries — 모든 이벤트 타입 알림 ON
+INSERT INTO notification.setting_entries (member_id, event_type_code, is_enabled)
 SELECT
     :seed_offset + i,
-    TRUE,
-    TRUE,
-    TRUE,
-    TRUE,
-    NOW()
+    et.code,
+    TRUE
 FROM generate_series(0, :vus - 1) AS i
-ON CONFLICT (member_id) DO NOTHING;
+CROSS JOIN notification.event_types et
+WHERE et.is_enabled = TRUE
+ON CONFLICT (member_id, event_type_code) DO NOTHING;

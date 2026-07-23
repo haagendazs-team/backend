@@ -2,7 +2,7 @@ server:
   port: 8081
   netty:
     connection-timeout: 30s
-    idle-timeout: 210s
+    idle-timeout: 90s
     worker-count: 16
 
 spring:
@@ -19,8 +19,8 @@ spring:
     properties:
       schema: notification
     pool:
-      initial-size: ${R2DBC_POOL_INITIAL:5}
-      max-size: ${R2DBC_POOL_MAX:20}
+      initial-size: ${R2DBC_POOL_INITIAL:10}
+      max-size: ${R2DBC_POOL_MAX:50}
 
   # Flyway는 JDBC URL로 별도 동작 (R2DBC URL과 독립적)
   flyway:
@@ -46,6 +46,8 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     topics:
       push: member.notif.push.v1,chat.notif.push.v1,payment.notif.push.v1
+      email-cert: member.notif.email-cert.v1
+      member-created: member.created.v1
 
   mail:
     host: ${MAIL_HOST:localhost}
@@ -92,7 +94,7 @@ notification:
     backoff-minutes: [1, 5, 30, 120, 360]
     max-stuck-retry: 3
   stream:
-    max-len: 10000
+    max-len: 200000
   scheduler:
     reserved-dispatch-cron: "0 0/5 * * * *"
     stream-trim-cron: "0 0 * * * *"
@@ -106,9 +108,9 @@ notification:
   payload:
     game-start-offset-minutes: 30
   sse:
-    timeout-ms: 1800000
+    timeout-ms: 90000
     ping-interval-ms: 30000
     ping-cron: "0/30 * * * * *"
   buffer:
-    max-size: 200
-    flush-interval: 500ms
+    max-size: 1000
+    flush-interval: 200ms

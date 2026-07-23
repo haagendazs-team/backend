@@ -8,6 +8,7 @@ import com.haagendazs.application.dto.UpdateSettingCommand;
 import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.domain.model.Channel;
 import com.haagendazs.domain.model.ChannelType;
+import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.model.SettingEntry;
 import com.haagendazs.domain.repository.ChannelRepository;
 import com.haagendazs.domain.repository.SettingEntryRepository;
@@ -33,29 +34,28 @@ public class SettingService {
     @Transactional(readOnly = true)
     public Flux<SettingResult> getSettings(Long memberId) {
         return Flux.fromIterable(eventTypeRegistry.getAllDefinitions())
-                .filter(def -> def.isEnabled())
+                .filter(EventTypeDefinition::isEnabled)
                 .flatMap(def -> settingEntryRepository.findByMemberIdAndEventTypeCode(memberId, def.getCode())
-                        .map(SettingResult::from)
-                        .switchIfEmpty(Mono.just(new SettingResult(memberId, def.getCode(), true))));
+                        .map(entry -> SettingResult.from(entry, def))
+                        .switchIfEmpty(Mono.just(SettingResult.defaultEnabled(memberId, def))));
     }
 
     @Transactional
     public Mono<SettingResult> updateSetting(Long memberId, UpdateSettingCommand command) {
-        if (eventTypeRegistry.getByCode(command.eventTypeCode()).isEmpty()) {
-            return Mono.error(new BusinessException(NotificationErrorCode.EVENT_TYPE_NOT_FOUND));
-        }
-        return settingEntryRepository.findByMemberIdAndEventTypeCode(memberId, command.eventTypeCode())
-                .switchIfEmpty(Mono.defer(() ->
-                        settingEntryRepository.save(SettingEntry.create(memberId, command.eventTypeCode()))))
-                .flatMap(entry -> {
-                    entry.updateEnabled(command.enabled());
-                    return settingEntryRepository.save(entry);
-                })
-                .flatMap(entry -> settingCachePort.isCached(memberId)
-                        .filter(cached -> cached)
-                        .flatMap(ignored -> settingCachePort.put(memberId, entry.getEventTypeCode(), entry.isEnabled()))
-                        .thenReturn(entry))
-                .map(SettingResult::from);
+        return Mono.justOrEmpty(eventTypeRegistry.getByCode(command.eventTypeCode()))
+                .switchIfEmpty(Mono.error(new BusinessException(NotificationErrorCode.EVENT_TYPE_NOT_FOUND)))
+                .flatMap(def -> settingEntryRepository.findByMemberIdAndEventTypeCode(memberId, command.eventTypeCode())
+                        .switchIfEmpty(Mono.defer(() ->
+                                settingEntryRepository.save(SettingEntry.create(memberId, command.eventTypeCode()))))
+                        .flatMap(entry -> {
+                            entry.updateEnabled(command.enabled());
+                            return settingEntryRepository.save(entry);
+                        })
+                        .flatMap(entry -> settingCachePort.isCached(memberId)
+                                .filter(cached -> cached)
+                                .flatMap(ignored -> settingCachePort.put(memberId, entry.getEventTypeCode(), entry.isEnabled()))
+                                .thenReturn(entry))
+                        .map(entry -> SettingResult.from(entry, def)));
     }
 
     @Transactional(readOnly = true)

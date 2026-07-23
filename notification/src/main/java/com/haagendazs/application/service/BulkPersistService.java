@@ -11,10 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
+import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -30,71 +33,54 @@ public class BulkPersistService {
     public Mono<Boolean> persist(Event event, List<Notification> notifications, String payload) {
         return notificationRepository.saveAll(notifications)
                 .collectList()
-                .flatMap(saved -> {
-                    List<Long> memberIds = saved.stream().map(Notification::getMemberId).toList();
-                    return channelRepository.findByMemberIdInAndEnabledTrue(memberIds)
-                            .collectMultimap(Channel::getMemberId)
-                            .flatMap(channelsByMember -> Flux.fromIterable(saved)
-                                    .flatMap(notification -> {
-                                        List<Channel> channels = (List<Channel>)
-                                                channelsByMember.getOrDefault(notification.getMemberId(), List.of());
-                                        List<Channel> emailChannels = channels.stream()
-                                                .filter(c -> c.getChannelType() == ChannelType.EMAIL).toList();
-                                        List<Channel> nonEmailChannels = channels.stream()
-                                                .filter(c -> c.getChannelType() != ChannelType.EMAIL).toList();
-
-                                        return Flux.fromIterable(nonEmailChannels)
-                                                .flatMap(c -> dispatcher.sendToChannelAndBuildHistory(
-                                                        notification.getId(), c, event.getTypeName(), payload))
-                                                .flatMap(historyRepository::save)
-                                                .any(History::isFailed)
-                                                .doOnSuccess(ignored -> sendEmailAndSseAsync(
-                                                        notification, emailChannels, event, payload));
-                                    })
-                                    .any(failed -> failed));
-                });
+                .flatMap(saved -> loadChannelsByMember(saved)
+                        .flatMap(channelsByMember -> Flux.fromIterable(saved)
+                                .flatMap(notification -> sendAndRecord(
+                                        notification.getId(),
+                                        channelsOf(channelsByMember, notification.getMemberId()),
+                                        event.getTypeName(), payload)
+                                        .any(History::isFailed))
+                                .any(failed -> failed)));
     }
 
     public Mono<Void> persistBuffered(List<BufferItem> items) {
+        Map<Long, BufferItem> itemByMemberId = indexByMemberId(items);
         List<Notification> notifications = items.stream().map(BufferItem::notification).toList();
         return notificationRepository.saveAll(notifications)
                 .collectList()
-                .flatMap(saved -> {
-                    List<Long> memberIds = saved.stream().map(Notification::getMemberId).toList();
-                    return channelRepository.findByMemberIdInAndEnabledTrue(memberIds)
-                            .collectMultimap(Channel::getMemberId)
-                            .flatMap(channelsByMember -> {
-                                java.util.Map<Long, BufferItem> itemByMemberId = items.stream()
-                                        .collect(java.util.stream.Collectors.toMap(
-                                                i -> i.notification().getMemberId(),
-                                                i -> i,
-                                                (a, b) -> a));
-
-                                return Flux.fromIterable(saved)
-                                        .flatMap(notification -> {
-                                            BufferItem item = itemByMemberId.get(notification.getMemberId());
-                                            List<Channel> channels = (List<Channel>)
-                                                    channelsByMember.getOrDefault(notification.getMemberId(), List.of());
-
-                                            return Flux.fromIterable(channels)
-                                                    .filter(c -> c.getChannelType() != ChannelType.EMAIL)
-                                                    .flatMap(c -> dispatcher.sendToChannelAndBuildHistory(
-                                                            notification.getId(), c, item.subject(), item.payload()))
-                                                    .flatMap(historyRepository::save)
-                                                    .then(Mono.fromRunnable(() -> sendSseAfterPersist(notification, item)));
-                                        })
-                                        .then();
-                            });
-                });
+                .flatMap(saved -> loadChannelsByMember(saved)
+                        .flatMap(channelsByMember -> Flux.fromIterable(saved)
+                                .flatMap(notification -> {
+                                    BufferItem item = itemByMemberId.get(notification.getMemberId());
+                                    return sendAndRecord(
+                                            notification.getId(),
+                                            channelsOf(channelsByMember, notification.getMemberId()),
+                                            item.subject(), item.payload())
+                                            .then(Mono.fromRunnable(() -> sendSseAfterPersist(notification, item)));
+                                })
+                                .then()));
     }
 
-    private void sendEmailAndSseAsync(Notification notification, List<Channel> emailChannels,
-                                       Event event, String payload) {
-        Flux.fromIterable(emailChannels)
-                .flatMap(c -> dispatcher.sendToChannelAndBuildHistory(notification.getId(), c, event.getTypeName(), payload))
-                .flatMap(historyRepository::save)
-                .subscribeOn(Schedulers.boundedElastic())
-                .subscribe();
+    private Mono<Map<Long, Collection<Channel>>> loadChannelsByMember(List<Notification> saved) {
+        List<Long> memberIds = saved.stream().map(Notification::getMemberId).toList();
+        return channelRepository.findByMemberIdInAndEnabledTrue(memberIds)
+                .collectMultimap(Channel::getMemberId);
+    }
+
+    private Flux<History> sendAndRecord(Long notificationId, Collection<Channel> channels,
+                                        String subject, String payload) {
+        return Flux.fromIterable(channels)
+                .flatMap(c -> dispatcher.sendToChannelAndBuildHistory(notificationId, c, subject, payload))
+                .flatMap(historyRepository::save);
+    }
+
+    private Collection<Channel> channelsOf(Map<Long, Collection<Channel>> channelsByMember, Long memberId) {
+        return channelsByMember.getOrDefault(memberId, List.of());
+    }
+
+    private Map<Long, BufferItem> indexByMemberId(List<BufferItem> items) {
+        return items.stream()
+                .collect(Collectors.toMap(i -> i.notification().getMemberId(), i -> i, (a, b) -> a));
     }
 
     private void sendSseAfterPersist(Notification notification, BufferItem item) {
@@ -104,7 +90,9 @@ public class BulkPersistService {
                     item.subject(),
                     item.payload(),
                     notification.isAlreadyRead(),
-                    notification.getCreatedAt().toInstant(ZoneOffset.UTC)
+                    notification.getCreatedAt() != null
+                            ? notification.getCreatedAt().toInstant(ZoneOffset.UTC)
+                            : Instant.now()
             );
             sseNotificationPort.send(notification.getMemberId(), ssePayload);
         } catch (Exception e) {

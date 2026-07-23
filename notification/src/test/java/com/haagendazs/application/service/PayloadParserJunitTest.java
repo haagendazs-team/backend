@@ -115,4 +115,11 @@ class PayloadParserJunitTest {
 
         assertThat(payloadParser.extractScheduledAt(envelope)).isEmpty();
     }
+
+    @Test
+    @DisplayName("extractEventTypeCode 호출 시 JSON 파싱 자체가 실패하면 IllegalArgumentException 발생")
+    void extractEventTypeCode_throwsWhenJsonUnparseable() {
+        assertThatThrownBy(() -> payloadParser.extractEventTypeCode("{invalid"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

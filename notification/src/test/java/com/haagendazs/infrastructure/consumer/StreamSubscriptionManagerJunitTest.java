@@ -4,6 +4,7 @@ import com.haagendazs.application.service.EventStatusService;
 import com.haagendazs.application.service.FanoutService;
 import com.haagendazs.application.service.PayloadParser;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,15 +12,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.connection.stream.ObjectRecord;
-import org.springframework.data.redis.core.ReactiveStreamOperations;
+import org.springframework.data.redis.core.ReactiveRedisCallback;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.stream.StreamReceiver;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,14 +49,14 @@ class StreamSubscriptionManagerJunitTest {
     @SuppressWarnings("unchecked")
     void setUp() {
         subscriptionManager = new StreamSubscriptionManager(
-                receiver, redisTemplate, statusService, fanoutService, registry, payloadParser);
+                receiver, redisTemplate, statusService, fanoutService, registry, payloadParser,
+                new SimpleMeterRegistry());
         ReflectionTestUtils.setField(subscriptionManager, "consumerName", "test-consumer");
 
-        ReactiveStreamOperations<String, Object, Object> streamOps = mock(ReactiveStreamOperations.class);
-        when(redisTemplate.opsForStream()).thenReturn((ReactiveStreamOperations) streamOps);
-        when(streamOps.createGroup(any(), any(), any())).thenReturn(Mono.just("OK"));
+        // createGroupIfAbsent: low-level execute() 경로 — BUSYGROUP으로 swallow됨
+        when(redisTemplate.execute(any(ReactiveRedisCallback.class))).thenReturn(Flux.just("OK"));
         when(receiver.receive(any(), any(org.springframework.data.redis.connection.stream.StreamOffset.class)))
-                .thenReturn(reactor.core.publisher.Flux.never());
+                .thenReturn(Flux.never());
     }
 
     @Test

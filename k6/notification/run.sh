@@ -17,14 +17,10 @@
 #   DB_NAME       — 데이터베이스 이름         (기본: sportsify)
 #   DB_USER       — DB 사용자                (기본: sportsify)
 #
-# OS 사전 설정 (3K 실행 시 필수):
-#   macOS:
-#     ulimit -n 131072
-#     sudo sysctl -w kern.maxfilesperproc=131072
-#     sudo sysctl -w kern.maxfiles=131072
-#   Linux:
-#     ulimit -n 131072
-#     sudo sysctl -w fs.file-max=200000
+# OS 사전 설정 (6K 실행 시 필수):
+#   ulimit -n 131072
+#   sudo sysctl -w kern.maxfilesperproc=131072
+#   sudo sysctl -w kern.maxfiles=131072
 
 set -euo pipefail
 
@@ -66,14 +62,9 @@ check_fd_limit() {
         echo "╔══════════════════════════════════════════════════════════════╗"
         echo "║  경고: OS fd 한계 부족 (현재: ${current_limit}, 필요: ${required}+)       ║"
         echo "║                                                              ║"
-        echo "║  macOS:                                                      ║"
-        echo "║    ulimit -n 131072     * 2                                       ║"
-        echo "║    sudo sysctl -w kern.maxfilesperproc=131072                 ║"
-        echo "║    sudo sysctl -w kern.maxfiles=131072                        ║"
-        echo "║                                                              ║"
-        echo "║  Linux:                                                      ║"
-        echo "║    ulimit -n 131072                                           ║"
-        echo "║    sudo sysctl -w fs.file-max=200000                         ║"
+        echo "║    ulimit -n 131072                                          ║"
+        echo "║    sudo sysctl -w kern.maxfilesperproc=131072                ║"
+        echo "║    sudo sysctl -w kern.maxfiles=131072                       ║"
         echo "║                                                              ║"
         echo "║  이 상태로 실행하면 연결 실패가 서버 문제처럼 보입니다.     ║"
         echo "╚══════════════════════════════════════════════════════════════╝"
@@ -111,8 +102,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# sustain-direct, sse-v2-poc: DB seed / 토큰 불필요 — X-Member-Id 헤더로 직접 접속
-if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]]; then
+# send / receive: X-Member-Id 직접 연결 — DB seed / 토큰 불필요
+SSE_VUS="${SSE_VUS:-6000}"
+RECEIVER_VUS="${RECEIVER_VUS:-500}"
+
+if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]] && \
+   [[ "$TARGET" != "send" ]] && [[ "$TARGET" != "receive" ]]; then
 
 # ── seed ──────────────────────────────────────────────────────
 echo "▶ [seed] seed.sql 실행 중... (VUS=$VUS, SEED_OFFSET=$SEED_OFFSET)"
@@ -122,7 +117,7 @@ echo ""
 
 # ── 토큰 사전 발급 (bulk API, 1000개씩 병렬) ─────────────────────
 BULK_SIZE=1000
-BATCH_PARALLEL=200
+BATCH_PARALLEL=10
 echo "▶ [tokens] ${VUS}개 토큰 사전 발급 중 (bulk ${BULK_SIZE}개씩, 병렬 ${BATCH_PARALLEL})..."
 TEMP_DIR=$(mktemp -d)
 
@@ -243,6 +238,8 @@ run_k6() {
     local script="$1"
     shift
     local log_file="${LOG_DIR}/$(basename "$script" .js)_$(date +%Y%m%d_%H%M%S).log"
+    local tokens_arg=""
+    [[ -f "$TOKENS_FILE" ]] && tokens_arg="-e K6_TOKENS_FILE=$TOKENS_FILE"
     echo "▶ [k6] $script 실행 중... (로그: $log_file)"
     k6 run \
         --compatibility-mode=base \
@@ -251,8 +248,8 @@ run_k6() {
         -e MEMBER_URL="$MEMBER_URL" \
         -e NOTIFICATION_URL="http://localhost:8081" \
         -e K6_SEED_OFFSET="$SEED_OFFSET" \
-        -e K6_TOKENS_FILE="$TOKENS_FILE" \
         -e MAX_VUS="$VUS" \
+        ${tokens_arg} \
         "$@" \
         "$SCRIPT_DIR/$script" 2>&1 | tee "$log_file" &
     local k6_pid=$!
@@ -276,10 +273,10 @@ case "$TARGET" in
         run_k6 sustain-direct.js -e MAX_VUS="$SUSTAIN_MAX_VUS" -e START_VUS="$SUSTAIN_START_VUS"
         ;;
     send)
-        run_k6 send.js
+        run_k6 send.js -e SSE_VUS="$SSE_VUS" -e K6_SEED_OFFSET="$SEED_OFFSET"
         ;;
     receive)
-        run_k6 receive.js --log-output=none
+        run_k6 receive.js -e RECEIVER_VUS="$RECEIVER_VUS" -e K6_SEED_OFFSET="$SEED_OFFSET"
         ;;
     all)
         run_k6 all.js --log-output=none

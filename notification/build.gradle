@@ -62,6 +62,23 @@ dependencies {
 }
 
 
+dependencies {
+    // Testcontainers — Kafka / Postgres / Redis (BOM 버전은 Boot 4.0.3이 관리: 2.0.3)
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-kafka'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'com.redis:testcontainers-redis'
+
+    // Awaitility — 비동기 Kafka 소비 결과 폴링 (Boot 4.0.3 관리: 4.3.0)
+    testImplementation 'org.awaitility:awaitility'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+}
+
+tasks.withType(Test).configureEach {
+    environment 'TESTCONTAINERS_RYUK_DISABLED', 'true'
+}
+
 jacoco {
     toolVersion = '0.8.15'
 }
@@ -98,15 +115,19 @@ jacocoTestReport {
                 'com/haagendazs/application/service/FanoutService.class',
                 'com/haagendazs/application/service/SlackCommandService.class',
                 'com/haagendazs/application/service/BufferedChunkService.class',
+                'com/haagendazs/application/service/BufferedChunkService$*.class',
                 'com/haagendazs/application/service/NotificationBatchBuffer.class',
                 'com/haagendazs/application/service/EventStatusService.class',
                 'com/haagendazs/application/service/NotificationService.class',
                 'com/haagendazs/application/service/ScheduledNotificationProcessor.class',
                 'com/haagendazs/application/service/ScheduledEventClaimService.class',
                 'com/haagendazs/application/service/ChunkService.class',
-                'com/haagendazs/application/service/SingleTargetResult.class',
                 'com/haagendazs/infrastructure/consumer/PelMessageProcessor.class',
                 'com/haagendazs/infrastructure/consumer/StreamMaintenanceScheduler.class',
+                'com/haagendazs/infrastructure/consumer/StreamSubscriptionManager.class',
+                'com/haagendazs/infrastructure/swagger/**',
+                'com/haagendazs/infrastructure/kafka/KafkaNotificationConsumer.class',
+                'com/haagendazs/infrastructure/cache/RedisSettingCacheAdapter.class',
             ])
         }))
     }

@@ -6,6 +6,9 @@ import com.haagendazs.application.service.PayloadParser;
 import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.infrastructure.config.RedisStreamsConfig;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,9 @@ import org.springframework.stereotype.Component;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
+
+import java.time.Duration;
 
 @Slf4j
 @Component
@@ -33,22 +39,39 @@ public class StreamSubscriptionManager {
     private final FanoutService fanoutService;
     private final EventTypeRegistry registry;
     private final PayloadParser payloadParser;
+    private final MeterRegistry meterRegistry;
 
     @Value("${spring.application.name:app}-consumer-${HOSTNAME:local}")
     private String consumerName;
 
     private Disposable subscription;
+    private Counter consumeTotal;
+    private Counter consumeErrorTotal;
+    private Timer consumeDuration;
 
     @PostConstruct
     public void start() {
+        consumeTotal = Counter.builder("stream_consume")
+                .description("Redis Stream XREADGROUP 처리 완료 수")
+                .register(meterRegistry);
+        consumeErrorTotal = Counter.builder("stream_consume_error")
+                .description("Redis Stream 메시지 처리 실패 수")
+                .register(meterRegistry);
+        consumeDuration = Timer.builder("stream_consume_duration")
+                .description("Redis Stream 메시지 1건 처리 지연")
+                .register(meterRegistry);
         createGroupIfAbsent(RedisStreamsConfig.STREAM_KEY);
-        subscription = receiver.receive(
-                        Consumer.from(RedisStreamsConfig.NOTIFICATION_GROUP, consumerName),
-                        StreamOffset.create(RedisStreamsConfig.STREAM_KEY, ReadOffset.lastConsumed()))
-                .flatMap(this::handleMessage)
+        subscription = buildReceiveFlux()
+                .retryWhen(Retry.backoff(Long.MAX_VALUE, Duration.ofSeconds(2))
+                        .maxBackoff(Duration.ofSeconds(30))
+                        .doBeforeRetry(signal -> {
+                            log.warn("Stream 구독 재연결 시도 attempt={} streamKey={}",
+                                    signal.totalRetries() + 1, RedisStreamsConfig.STREAM_KEY);
+                            createGroupIfAbsent(RedisStreamsConfig.STREAM_KEY);
+                        }))
                 .subscribe(
                         v -> {},
-                        e -> log.error("Stream 구독 오류 streamKey={}", RedisStreamsConfig.STREAM_KEY, e)
+                        e -> log.error("Stream 구독 영구 오류 streamKey={}", RedisStreamsConfig.STREAM_KEY, e)
                 );
         log.info("Redis Stream 구독 시작 streamKey={}", RedisStreamsConfig.STREAM_KEY);
     }
@@ -64,21 +87,33 @@ public class StreamSubscriptionManager {
         return subscription != null && !subscription.isDisposed();
     }
 
+    private static final int CONSUME_CONCURRENCY = 64;
+
+    private Flux<Void> buildReceiveFlux() {
+        return receiver.receive(
+                        Consumer.from(RedisStreamsConfig.NOTIFICATION_GROUP, consumerName),
+                        StreamOffset.create(RedisStreamsConfig.STREAM_KEY, ReadOffset.lastConsumed()))
+                .flatMap(this::handleMessage, CONSUME_CONCURRENCY);
+    }
+
     private Flux<Void> handleMessage(ObjectRecord<String, String> message) {
         String rawPayload = message.getValue();
         String streamMessageId = message.getId().getValue();
+        long startNs = System.nanoTime();
 
         String eventTypeCode;
         try {
             eventTypeCode = payloadParser.extractEventTypeCode(rawPayload);
         } catch (Exception e) {
             log.error("envelope 파싱 실패 id={} payload={}", streamMessageId, rawPayload, e);
+            consumeErrorTotal.increment();
             return Flux.empty();
         }
 
         EventTypeDefinition definition = registry.getByCode(eventTypeCode).orElse(null);
         if (definition == null) {
             log.warn("등록되지 않은 eventTypeCode={} id={}", eventTypeCode, streamMessageId);
+            consumeErrorTotal.increment();
             return Flux.empty();
         }
 
@@ -92,10 +127,15 @@ public class StreamSubscriptionManager {
                     return fanoutService.fanoutBuffered(event, definition, rawPayload,
                                     RedisStreamsConfig.STREAM_KEY, message.getId())
                             .then(statusService.markEventStatus(event.getId(), false))
-                            .doOnSuccess(v -> log.info("버퍼 enqueue 완료 eventType={} id={}", eventTypeCode, streamMessageId))
+                            .doOnSuccess(v -> {
+                                consumeTotal.increment();
+                                consumeDuration.record(System.nanoTime() - startNs, java.util.concurrent.TimeUnit.NANOSECONDS);
+                                log.info("버퍼 enqueue 완료 eventType={} id={}", eventTypeCode, streamMessageId);
+                            })
                             .flux();
                 })
                 .onErrorResume(e -> {
+                    consumeErrorTotal.increment();
                     log.error("Stream 처리 실패 eventType={} id={}", eventTypeCode, streamMessageId, e);
                     return Flux.empty();
                 });
@@ -109,9 +149,16 @@ public class StreamSubscriptionManager {
 
     private void createGroupIfAbsent(String streamKey) {
         try {
-            redisTemplate.opsForStream()
-                    .createGroup(streamKey, ReadOffset.from("0"), RedisStreamsConfig.NOTIFICATION_GROUP)
-                    .block();
+            // XGROUP CREATE <key> <group> 0 MKSTREAM — stream key가 없어도 자동 생성
+            java.nio.ByteBuffer keyBuffer = java.nio.ByteBuffer.wrap(streamKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            redisTemplate.execute(connection ->
+                    connection.streamCommands().xGroupCreate(
+                            keyBuffer,
+                            RedisStreamsConfig.NOTIFICATION_GROUP,
+                            org.springframework.data.redis.connection.stream.ReadOffset.from("0"),
+                            true
+                    )
+            ).blockFirst();
         } catch (Exception e) {
             if (!isBusyGroup(e)) {
                 log.error("Consumer group 생성 실패 stream={}", streamKey, e);

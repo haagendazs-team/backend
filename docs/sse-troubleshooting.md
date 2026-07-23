@@ -145,40 +145,16 @@ JAVA_TOOL_OPTIONS=-XX:MaxMetaspaceSize=256m \
 
 ### Phase 3 — 애플리케이션 구조 개선 (10,500 → 16,400)
 
-#### SSE 세션 jitter
-
-동일 시각에 수천 세션이 동시 만료 → 재연결 폭풍 → GC 압박 → STW 루프.
-
-`SseEmitterManager`:
-
-```java
-long jitterMs = ThreadLocalRandom.current().nextLong(-30_000, 30_000);
-long sessionTimeoutMs = properties.sse().timeoutMs() + jitterMs;
-
-return Flux.concat(replay, sink.asFlux())
-        .timeout(Duration.ofMillis(sessionTimeoutMs));
-```
-
-세션 만료 시점 ±30초 분산 → 동시 재연결 폭풍(thundering herd) 방지.
-
-#### Reactor Netty worker 스레드
-
 `application.yml`:
 
 ```yaml
 server:
     netty:
         connection-timeout: 30s
-        idle-timeout: 210s
+        idle-timeout: 90s
         worker-count: 16
 ```
 
-| 설정 | 이유 |
-|---|---|
-| `idle-timeout: 210s` | ping 60초 주기 × 3 + 여유 → 정상 연결이 idle-timeout으로 끊기지 않도록 |
-| `worker-count: 16` | Netty는 I/O Bound 특성을 가지므로, 로컬 환경에서는 논리 코어 수(8)보다 많은 Worker Thread를 사용하여 이벤트 처리량을 확보 |
-
-> t4g.medium(2 vCPU) 운영 적용 시 `worker-count: 4` 수준이 적합. 16은 로컬 M2 전용 설정.
 
 #### DB 배치 버퍼
 
@@ -264,7 +240,6 @@ export GOMEMLIMIT=4GiB  # OOM killer 방지 hard limit
 | JVM heap | 무제한 | `-Xmx1g -XX:SoftMaxHeapSize=800m` |
 | Netty worker | CPU 코어 수 (기본) | 16 (M2 로컬 전용) |
 | K6 `GOMEMLIMIT` | 무제한 | 4GiB |
-| SSE 세션 jitter | 없음 (동시 만료) | ±30초 분산 |
 | 알림 저장 | 건별 insert | 200건 bulk insert |
 
 ### K6 임계값 기준 통과

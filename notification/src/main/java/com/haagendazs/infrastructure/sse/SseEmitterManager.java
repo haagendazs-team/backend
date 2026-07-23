@@ -3,7 +3,6 @@ package com.haagendazs.infrastructure.sse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haagendazs.application.port.SseNotificationPort;
-import com.haagendazs.domain.model.Channel;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisPubSubConfig;
 import com.haagendazs.presentation.dto.NotificationResponse;
@@ -25,10 +24,8 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -39,7 +36,7 @@ public class SseEmitterManager implements SseNotificationPort {
 
     private static final String SSE_SESSION_KEY_PREFIX = "sse:online:";
     private static final ServerSentEvent<Object> PING_EVENT =
-            ServerSentEvent.<Object>builder().event("ping").data("").build();
+            ServerSentEvent.builder().event("ping").data("").build();
 
     private final NotificationProperties properties;
     private final MeterRegistry meterRegistry;
@@ -61,9 +58,9 @@ public class SseEmitterManager implements SseNotificationPort {
     }
 
     @Override
-    public Flux<ServerSentEvent<Object>> subscribe(Long memberId, List<Channel> channels, Flux<ServerSentEvent<Object>> replay) {
+    public Flux<ServerSentEvent<Object>> subscribe(Long memberId, Flux<ServerSentEvent<Object>> replay) {
         Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().multicast().onBackpressureBuffer(256, false);
-        SseSession previous = sessions.put(memberId, new SseSession(sink, channels));
+        SseSession previous = sessions.put(memberId, new SseSession(sink));
         if (previous != null) {
             previous.sink().tryEmitComplete();
         }
@@ -75,11 +72,8 @@ public class SseEmitterManager implements SseNotificationPort {
 
         log.info("SSE subscribed memberId={} instanceId={}", memberId, instanceId);
 
-        long jitterMs = ThreadLocalRandom.current().nextLong(-30_000, 30_000);
-        long sessionTimeoutMs = properties.sse().timeoutMs() + jitterMs;
-
         return Flux.concat(replay, sink.asFlux())
-                .timeout(Duration.ofMillis(sessionTimeoutMs))
+                .timeout(Duration.ofMillis( properties.sse().timeoutMs() ))
                 .publishOn(Schedulers.boundedElastic())
                 .doFinally(signal -> {
                     sessions.compute(memberId, (_, current) -> {
@@ -144,13 +138,10 @@ public class SseEmitterManager implements SseNotificationPort {
 
     @Override
     public Mono<Boolean> isConnected(Long memberId) {
+        if (sessions.containsKey(memberId)) {
+            return Mono.just(true);
+        }
         return redisTemplate.hasKey(SSE_SESSION_KEY_PREFIX + memberId);
-    }
-
-    @Override
-    public List<Channel> getCachedChannels(Long memberId) {
-        SseSession session = sessions.get(memberId);
-        return session != null ? session.channels() : List.of();
     }
 
     private ServerSentEvent<Object> buildEvent(NotificationResponse response) {
@@ -163,19 +154,13 @@ public class SseEmitterManager implements SseNotificationPort {
 
     private static final class SseSession {
         private final Sinks.Many<ServerSentEvent<Object>> sink;
-        private final List<Channel> channels;
 
-        SseSession(Sinks.Many<ServerSentEvent<Object>> sink, List<Channel> channels) {
+        SseSession(Sinks.Many<ServerSentEvent<Object>> sink) {
             this.sink = sink;
-            this.channels = channels;
         }
 
         Sinks.Many<ServerSentEvent<Object>> sink() {
             return sink;
-        }
-
-        List<Channel> channels() {
-            return channels;
         }
     }
 }

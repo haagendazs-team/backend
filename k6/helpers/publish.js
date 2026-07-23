@@ -7,7 +7,7 @@ const HEADERS = { 'Content-Type': 'application/json' };
 
 /**
  * 단건 알림 발행 — payment 결제 완료 이벤트
- * NotificationEnvelope: memberId(필수), payload, isDispatchType
+ * eventTypeCode는 서버 측 payload/DTO에서 처리
  */
 export function publishPayment(memberId, iter) {
     const envelope = {
@@ -22,18 +22,3 @@ export function publishPayment(memberId, iter) {
     );
 }
 
-/**
- * 브로드캐스트 알림 발행 — ticket.opened 이벤트 (memberId 없음 = 전체 발송)
- */
-export function publishBroadcast(iter) {
-    const saleStartAt = `2099-01-${String((iter % 28) + 1).padStart(2, '0')}T10:00:00`;
-    const envelope = {
-        isDispatchType: 'IMMEDIATE',
-        payload: JSON.stringify({ gameId: iter, saleStartAt }),
-    };
-    return http.post(
-        `${NOTIFICATION_URL}/module/notifications/publish`,
-        JSON.stringify(envelope),
-        { headers: HEADERS }
-    );
-}

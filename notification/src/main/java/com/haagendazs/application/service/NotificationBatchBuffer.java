@@ -2,6 +2,10 @@ package com.haagendazs.application.service;
 
 import com.haagendazs.domain.model.BufferItem;
 import com.haagendazs.infrastructure.config.NotificationProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +33,7 @@ public class NotificationBatchBuffer {
     private final BulkPersistService bulkPersistService;
     private final ReactiveStringRedisTemplate redisTemplate;
     private final NotificationProperties properties;
+    private final MeterRegistry meterRegistry;
 
     private final ConcurrentLinkedQueue<BufferItem> queue = new ConcurrentLinkedQueue<>();
     private final AtomicInteger count = new AtomicInteger(0);
@@ -37,8 +42,24 @@ public class NotificationBatchBuffer {
             r -> new Thread(r, "notif-buffer-flusher")
     );
 
+    private Counter flushTotal;
+    private Counter flushErrorTotal;
+    private Timer flushDuration;
+
     @PostConstruct
     void startFlushScheduler() {
+        Gauge.builder("buffer_queue_depth", count, AtomicInteger::get)
+                .description("NotificationBatchBuffer 대기 항목 수")
+                .register(meterRegistry);
+        flushTotal = Counter.builder("buffer_flush")
+                .description("버퍼 flush 완료 횟수")
+                .register(meterRegistry);
+        flushErrorTotal = Counter.builder("buffer_flush_error")
+                .description("버퍼 flush 실패 횟수")
+                .register(meterRegistry);
+        flushDuration = Timer.builder("buffer_flush_duration")
+                .description("버퍼 flush 1회 소요 시간")
+                .register(meterRegistry);
         long intervalMs = properties.buffer().flushInterval().toMillis();
         scheduler.scheduleAtFixedRate(this::flush, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
     }
@@ -60,6 +81,7 @@ public class NotificationBatchBuffer {
         if (!flushLock.tryLock()) {
             return;
         }
+        long startNs = System.nanoTime();
         try {
             if (queue.isEmpty()) {
                 return;
@@ -70,8 +92,11 @@ public class NotificationBatchBuffer {
             }
             bulkPersistService.persistBuffered(batch).block();
             ackAll(batch);
+            flushTotal.increment();
+            flushDuration.record(System.nanoTime() - startNs, TimeUnit.NANOSECONDS);
             log.info("버퍼 flush 완료 size={}", batch.size());
         } catch (Exception e) {
+            flushErrorTotal.increment();
             log.error("버퍼 flush 실패 size={} — PEL 재처리 대기", queue.size(), e);
         } finally {
             flushLock.unlock();
