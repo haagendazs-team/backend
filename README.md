@@ -1,185 +1,87 @@
-# Haagendazs Backend
+# Haagendazs
 
-Spring Boot 4.0 기반 MSA 백엔드 프로젝트
+---
 
-## 기술 스택
+> **Haagendazs**는 클라우드 협업 플랫폼입니다.  <br />
+> 개발 기간: 2026.06.24 ~ 2026.07.24(1달)
 
-| 분류 | 기술 |
-|------|------|
-| Language | Java 25 |
-| Framework | Spring Boot 4.0.3 |
-| Cloud | Spring Cloud 2025.1.x |
-| Database | PostgreSQL 18 |
-| Cache / Pub-Sub | Redis 8 |
-| Message Broker | Apache Kafka 4.0 (KRaft) |
-| Search | Elasticsearch 8.13 |
-| Service Discovery | Eureka (Spring Cloud Netflix) |
-| API Gateway | Spring Cloud Gateway |
-| Build | Gradle (Multi-module) |
+## _intro._
 
-## 모듈 구성
+---
 
-| 모듈 | 포트 | 설명 |
-|------|------|------|
-| `config-server` | 8888 | 중앙 설정 서버 |
-| `discovery` | 8761 | Eureka 서비스 레지스트리 |
-| `gateway` | 8080 | API Gateway (JWT 검증, 라우팅) |
-| `member` | 8084 | 회원 서비스 |
-| `payment` | 8083 | 결제 서비스 |
-| `search` | 8082 | 검색 서비스 (Elasticsearch) |
-| `notification` | 8081 | 알림 서비스 (SSE, Redis Streams, Kafka) |
-| `chat` | 8085 | 채팅 서비스 (R2DBC, Redis) |
-| `common` | — | 공통 예외·응답 모듈 |
+프로젝트 주요 기능은 다음과 같습니다.
 
-> `member`, `payment`, `search`, `notification`, `chat`은 스케일아웃 가능 (`container_name`, `ports` 미사용)
+| 기능    | 설명                                 |
+|-------|------------------------------------|
+| 🎫 회원 | 회원 기능                              |
+| 💳 결제 | Toss Payments 기반 결제 시스템, 결제 무결성 확보 |
+| 💬 채팅 | -                                  |
+| 🔔 알림 | 주요 이벤트 실시간 알림 (SSE, Email)         |
 
-## 로컬 실행
+<br />
 
-### 사전 요구사항
+## _Member._
 
-- Docker Desktop
-- `.env` 파일 (아래 항목 필요)
+|                                                               **강정훈**                                                               |                                                                 **고정국**                                                                 |                                                                **김준영**                                                                |                                                                   **강상욱**                                                                   |                                                                 
+|:-----------------------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------------------------------------:|
+| [<img src="https://avatars.githubusercontent.com/u/105915960?v=4" height=130 width=130><br/>  @JHkoder](https://github.com/JHkoder) | [<img src="https://avatars.githubusercontent.com/u/126741397?v=4" height=130 width=130> <br/> @jeonggugo](https://github.com/jeonggugo) | [<img src="https://avatars.githubusercontent.com/u/133593957?v=4" height=130 width=130> <br/> @zzimzzim](https://github.com/zzimzzim) | [<img src="https://avatars.githubusercontent.com/u/148408469?v=4" height=120 width=130> <br/> @sangwookkhu](https://github.com/sangwookkhu) |
+|                                                                 알림                                                                  |                                                                   채팅                                                                    |                                                                  결제                                                                   |                                                                     회원                                                                      |                           
 
-```env
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-REDIS_PASSWORD=
-JWT_SECRET=
-GITHUB_CONFIG_SERVER=
-FRONT_URI=http://localhost:3000
-```
+<br />
 
-### 방법 1 — docker.sh (권장)
+## _Stack_.
 
+| Category          | Technology                                |
+|-------------------|-------------------------------------------|
+| Language          | Java 25                                   |
+| Framework         | Spring Boot 4.0.3 · Spring Cloud 2025.1.x |
+| Database          | PostgreSQL 18 (R2DBC + JDBC/Flyway)       |
+| Cache / Pub-Sub   | Redis 8                                   |
+| Message Broker    | Apache Kafka 4.0 (KRaft)                  |
+| Search            | Elasticsearch 8.13                        |
+| Service Discovery | Eureka (Spring Cloud Netflix)             |
+| API Gateway       | Spring Cloud Gateway                      |
+| Build             | Gradle (Multi-module)                     |
 
+---
 
-```bash
-./docker.sh up                        # 전체 스택 기동
-./docker.sh down                      # 전체 스택 종료
-./docker.sh <service>                 # 특정 서비스 + 의존 인프라 기동
-./docker.sh restart <service>         # 서비스 재빌드 후 재기동
-./docker.sh scale <service> <n>       # 서비스 스케일 (예: ./docker.sh scale member 2)
-./docker.sh ps                        # 컨테이너 상태 확인
-./docker.sh logs [service]            # 로그 확인
-```
+## _Modules._
 
-**예시 — 알림 서비스만 실행**
+| Module          | Port | Description                           |
+|-----------------|------|---------------------------------------|
+| `config-server` | 8888 | 중앙 설정 서버                              |
+| `discovery`     | 8761 | Eureka 서비스 레지스트리                      |
+| `gateway`       | 8080 | API Gateway (JWT 검증, 라우팅, Rate Limit) |
+| `member`        | 8084 | 회원 서비스                                |
+| `payment`       | 8083 | 결제 서비스                                |
+| `notification`  | 8081 | 알림 서비스 (SSE · Redis Streams · Kafka)  |
+| `chat`          | 8085 | 채팅 서비스                                |
+| `common`        | —    | 공통 예외 · 응답 모듈                         |
 
-```bash
-./docker.sh notification
-```
-
-의존 인프라(config-server, discovery, postgres, redis, kafka)를 자동으로 먼저 기동합니다.
-
-**예시 — 스케일아웃**
-
-```bash
-./docker.sh scale member 2   # member 인스턴스 2개로 확장
-./docker.sh scale member 1   # 가장 오래된 컨테이너 순으로 축소
-```
-
-### 방법 2 — Gradle (Docker 없이, JVM 직접 실행)
-
-빌드 후 전체 서비스를 순서대로 백그라운드 실행합니다. 로그는 `logs/<service>.log`에 저장됩니다.
-
-```bash
-# 전체 기동
-./gradlew startAll
-
-# 전체 종료
-./gradlew stopAll
-```
-
-특정 서비스만 실행하려면 인프라(Docker)를 먼저 올린 뒤 해당 모듈에서 실행합니다.
-
-```bash
-# 인프라 기동 (postgres, redis, kafka 등)
-docker compose -f docker-compose.local.yml up -d postgres redis kafka
-
-# 특정 서비스 단독 실행
-./gradlew :notification:localRun
-```
-
-### 방법 3 — docker compose 직접
-
-```bash
-# 전체 기동
-docker compose -f docker-compose.local.yml up -d
-
-# 전체 종료
-docker compose -f docker-compose.local.yml down
-```
-
-### 모니터링 포함 실행
-
-```bash
-docker compose -f docker-compose.local.yml -f docker-compose.monitoring.local.yml up -d
-```
-
-| 도구 | 주소 |
-|------|------|
-| Eureka Dashboard | http://localhost:8761 |
-| Grafana | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
-
-## 브랜치 전략
-
-```
-main ← release ← develop ← feat/*
-                          ← refactor/*
-                          ← hotfix/*
-```
-
-| 브랜치 | 용도 |
-|--------|------|
-| `main` | 라이브 배포 |
-| `release` | 배포 준비 |
-| `develop` | 통합 개발 |
-| `feat/*` | 기능 개발 |
-| `refactor/*` | 리팩토링 |
-| `hotfix/*` | 긴급 버그 수정 |
-
-## CI/CD
-
-PR을 `develop`으로 올리면 자동 실행됩니다.
-
-- **변경된 모듈만 테스트** — `common` 변경 시 전체 모듈 테스트
-- **모듈별 병렬 실행** — GitHub Actions matrix strategy
-- **라벨 자동 관리** — 실제 수정한 모듈 라벨만 부착/제거
-- **Assignee 자동 주입** — PR 작성자 자동 등록
-
-## 아키텍처
+## _Architecture._
 
 ```
 Client
   │
   ▼
-Gateway (8080) ── JWT 검증                          [Blue/Green]
+Gateway :8080  (JWT 검증 · Rate Limit · 라우팅)
   │
-  ├── member       (8084) ── PostgreSQL ── Kafka    [Rolling]
-  ├── payment      (8083) ── PostgreSQL ── Kafka    [Rolling]
-  ├── search       (8082) ── PostgreSQL ── Elasticsearch ── Kafka  [Rolling]
-  ├── notification (8081) ── PostgreSQL ── Redis (Streams + Pub/Sub) ── Kafka  [Rolling + Drain]
-  └── chat         (8085) ── PostgreSQL ── Redis ── Kafka          [Rolling + Drain]
+  ├── member       :8084  ─── PostgreSQL ── Kafka
+  ├── payment      :8083  ─── PostgreSQL ── Kafka
+  ├── notification :8081  ─── PostgreSQL ── Redis Streams/Pub-Sub ── Kafka
+  └── chat         :8085  ─── PostgreSQL ── Redis ── Kafka
 
-인프라 기동 순서: config-server → discovery → [서비스]
+Boot order: config-server → discovery → [services]
 ```
 
-* rds 사용안함 ec2.db.t4.micro
-* 서비스는 스케일 아웃 구조
+### _AWS Scale-Out._
 
-**SSE 멀티 인스턴스:** 알림 서비스는 Redis Pub/Sub으로 모든 인스턴스에 브로드캐스트하여 스케일아웃 시에도 SSE 세션을 정확히 전달합니다.
+EC2 + Auto Scaling Group 기반. 기본 인스턴스 1개, 부하에 따라 선택적 확장.  
+자세한 내용 → [docs/aws-scale-out-architecture.md](docs/aws-scale-out-architecture.md)
 
-## 배포 전략
+---
 
-| 서비스 | 전략 | 이유 |
-|--------|------|------|
-| `config-server` / `discovery` | Blue/Green | 전체 서비스가 의존 — 순단 시 연쇄 장애 위험 |
-| `gateway` | Blue/Green | 라우팅 룰 변경은 전/후 명확히 달라 롤백 단위 필요 |
-| `member` / `payment` / `search` | Rolling | 무상태에 가까운 비즈니스 로직 — 하위 호환 DB 마이그레이션 전제 |
-| `notification` / `chat` | Rolling + Connection Drain | SSE·WebSocket 연결 유지 필요 — 기존 연결 소진 후 인스턴스 종료 |
+## License
 
-## Config Server
-
-설정은 중앙 config repo에서 관리합니다.
-로컬에서는 `optional:configserver:` 설정으로 config repo 없이도 각 서비스의 `application.yml`로 동작합니다.
+This project is for educational purposes.  
+© 2026 Haagendazs Team. All rights reserved.
