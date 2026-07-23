@@ -1,0 +1,48 @@
+spring:
+  config:
+    import: ""   # config-server 연결 비활성화
+  main:
+    allow-bean-definition-overriding: true
+
+
+  mail:
+    host: localhost
+    port: 25
+    test-connection: false
+
+  threads:
+    virtual:
+      enabled: true
+
+eureka:
+  client:
+    enabled: false
+
+notification:
+  pel:
+    claim-min-idle: 5m
+    batch-size: 100
+    stuck-timeout: 10m
+    backoff-minutes: [1, 5, 30, 120, 360]
+    max-stuck-retry: 3
+  stream:
+    max-len: 1000
+  scheduler:
+    reserved-dispatch-cron: "0 0/5 * * * *"
+    stream-trim-cron: "0 0 * * * *"
+    stuck-recovery-cron: "0 0/10 * * * *"
+    pel-reclaim-cron: "0 0/2 * * * *"
+    leader-lock-ttl: 4m
+  channel:
+    max-per-member: 2
+  fanout:
+    chunk-size: 500
+  payload:
+    game-start-offset-minutes: 30
+  sse:
+    timeout-ms: 120000
+    ping-interval-ms: 30000
+    ping-cron: "0/30 * * * * *"
+  buffer:
+    max-size: 100
+    flush-interval: 200ms

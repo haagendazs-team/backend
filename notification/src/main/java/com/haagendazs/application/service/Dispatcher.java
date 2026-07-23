@@ -64,29 +64,19 @@ public class Dispatcher {
                             NotificationResult.of(notification, event));
                     return channelRepository.findByMemberIdAndEnabledTrue(memberId)
                             .collectList()
-                            .flatMap(channels -> {
-                                List<Channel> emailChannels = channels.stream()
-                                        .filter(c -> c.getChannelType() == ChannelType.EMAIL)
-                                        .toList();
-                                List<Channel> nonEmailChannels = channels.stream()
-                                        .filter(c -> c.getChannelType() != ChannelType.EMAIL)
-                                        .toList();
-
-                                return sendToChannels(notification.getId(), nonEmailChannels, event.getTypeName(), payload)
-                                        .collectList()
-                                        .flatMap(results -> {
-                                            boolean anyFailed = results.stream().anyMatch(f -> !f);
-                                            sendSseAndEmailAsync(memberId, ssePayload, notification.getId(),
-                                                    emailChannels, event.getTypeName(), payload);
-                                            return Mono.just(anyFailed);
-                                        });
-                            });
+                            .flatMap(channels -> sendToChannels(notification.getId(), channels, event.getTypeName(), payload)
+                                    .collectList()
+                                    .flatMap(results -> {
+                                        boolean anyFailed = results.stream().anyMatch(f -> !f);
+                                        sseNotificationPort.send(memberId, ssePayload);
+                                        return Mono.just(anyFailed);
+                                    }));
                 })
                 .defaultIfEmpty(false);
     }
 
     public Mono<History> sendToChannelAndBuildHistory(Long notificationId, Channel channel,
-                                                       String subject, String body) {
+                                                      String subject, String body) {
         NotificationSender sender = senderMap.get(channel.getChannelType());
         if (sender == null) {
             log.warn("지원하지 않는 채널 타입 channelType={} notificationId={}", channel.getChannelType(), notificationId);
@@ -110,18 +100,18 @@ public class Dispatcher {
     }
 
     private Flux<Boolean> sendToChannels(Long notificationId, List<Channel> channels,
-                                          String subject, String body) {
+                                         String subject, String body) {
         return Flux.fromIterable(channels)
                 .flatMap(channel -> sendToChannel(notificationId, channel, subject, body));
     }
 
     private Mono<Boolean> sendToChannel(Long notificationId, Channel channel,
-                                         String subject, String body) {
+                                        String subject, String body) {
         NotificationSender sender = senderMap.get(channel.getChannelType());
         if (sender == null) {
             log.warn("지원하지 않는 채널 타입 channelType={} notificationId={}", channel.getChannelType(), notificationId);
             return historyRepository.save(
-                    History.failed(notificationId, channel.getChannelType(), "지원하지 않는 채널 타입"))
+                            History.failed(notificationId, channel.getChannelType(), "지원하지 않는 채널 타입"))
                     .thenReturn(false);
         }
         return Mono.fromCallable(() -> {
@@ -134,14 +124,4 @@ public class Dispatcher {
                 .flatMap(history -> historyRepository.save(history).thenReturn(!history.isFailed()));
     }
 
-    private void sendSseAndEmailAsync(Long memberId, NotificationResponse ssePayload, Long notificationId,
-                                       List<Channel> emailChannels, String subject, String body) {
-        sseNotificationPort.send(memberId, ssePayload);
-        if (!emailChannels.isEmpty()) {
-            Flux.fromIterable(emailChannels)
-                    .flatMap(channel -> sendToChannel(notificationId, channel, subject, body))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .subscribe();
-        }
-    }
 }

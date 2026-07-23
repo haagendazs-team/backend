@@ -26,4 +26,25 @@ class EventTypeDefinitionJunitTest {
         assertThat(def.isScheduled()).isTrue();
         assertThat(def.isSingleTarget()).isFalse();
     }
+
+    @Test
+    @DisplayName("메타데이터 포함 팩토리 메서드로 생성 시 displayName, description, category가 설정된다")
+    void ofWithMetadata_setsDisplayFields() {
+        EventTypeDefinition def = EventTypeDefinition.of(
+                "PAYMENT_COMPLETED", false, true,
+                "결제 완료 알림", "결제가 완료되면 알림을 받습니다.", "PAYMENT");
+
+        assertThat(def.getDisplayName()).isEqualTo("결제 완료 알림");
+        assertThat(def.getDescription()).isEqualTo("결제가 완료되면 알림을 받습니다.");
+        assertThat(def.getCategory()).isEqualTo("PAYMENT");
+        assertThat(def.isNew()).isTrue();
+    }
+
+    @Test
+    @DisplayName("getId()는 code를 반환한다")
+    void getId_returnsCode() {
+        EventTypeDefinition def = EventTypeDefinition.of("PAYMENT_COMPLETED", false, true);
+
+        assertThat(def.getId()).isEqualTo("PAYMENT_COMPLETED");
+    }
 }

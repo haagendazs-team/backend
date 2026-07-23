@@ -26,6 +26,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.anyString;
 
@@ -54,11 +56,11 @@ class SettingServiceJunitTest {
 
     @BeforeEach
     void setUp() {
-        enabledDef = EventTypeDefinition.of("TICKET_OPEN", false, true);
+        enabledDef = EventTypeDefinition.of("TICKET_OPEN", false, true, "티켓 오픈 알림", "티켓 판매가 시작될 때 알림을 받습니다.", "TICKET");
     }
 
     @Test
-    @DisplayName("등록된 활성 이벤트 타입에 대해 설정 항목이 있으면 해당 설정을 반환한다")
+    @DisplayName("등록된 활성 이벤트 타입에 대해 설정 항목이 있으면 메타데이터와 함께 반환한다")
     void getSettings_existingEntry_returnsEntryResult() {
         // GIVEN
         SettingEntry entry = SettingEntry.create(1L, "TICKET_OPEN");
@@ -74,10 +76,12 @@ class SettingServiceJunitTest {
         assertThat(results.get(0).eventTypeCode()).isEqualTo("TICKET_OPEN");
         assertThat(results.get(0).enabled()).isTrue();
         assertThat(results.get(0).memberId()).isEqualTo(1L);
+        assertThat(results.get(0).displayName()).isEqualTo("티켓 오픈 알림");
+        assertThat(results.get(0).category()).isEqualTo("TICKET");
     }
 
     @Test
-    @DisplayName("등록된 활성 이벤트 타입에 대해 설정 항목이 없으면 기본값 enabled=true로 반환한다")
+    @DisplayName("등록된 활성 이벤트 타입에 대해 설정 항목이 없으면 기본값 enabled=true와 메타데이터를 반환한다")
     void getSettings_noEntry_returnsDefaultEnabled() {
         // GIVEN
         when(eventTypeRegistry.getAllDefinitions()).thenReturn(List.of(enabledDef));
@@ -91,13 +95,15 @@ class SettingServiceJunitTest {
         assertThat(results).hasSize(1);
         assertThat(results.get(0).eventTypeCode()).isEqualTo("TICKET_OPEN");
         assertThat(results.get(0).enabled()).isTrue();
+        assertThat(results.get(0).displayName()).isEqualTo("티켓 오픈 알림");
+        assertThat(results.get(0).category()).isEqualTo("TICKET");
     }
 
     @Test
     @DisplayName("등록된 활성 이벤트 타입이 여러 개일 때 모든 설정 항목을 반환한다")
     void getSettings_multipleEventTypes_returnsAll() {
         // GIVEN
-        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", false, true);
+        EventTypeDefinition anotherDef = EventTypeDefinition.of("GAME_START", false, true, "경기 시작 알림", "경기 시작 30분 전에 알림을 받습니다.", "TICKET");
         SettingEntry entry1 = SettingEntry.create(1L, "TICKET_OPEN");
         SettingEntry entry2 = SettingEntry.create(1L, "GAME_START");
         when(eventTypeRegistry.getAllDefinitions()).thenReturn(List.of(enabledDef, anotherDef));
@@ -171,5 +177,26 @@ class SettingServiceJunitTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                         .isEqualTo(NotificationErrorCode.EVENT_TYPE_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("캐시가 존재할 때 updateSetting 호출 시 캐시도 업데이트된다")
+    void updateSetting_whenCached_updatesCacheEntry() {
+        // GIVEN
+        SettingEntry existing = SettingEntry.create(1L, "TICKET_OPEN");
+        when(eventTypeRegistry.getByCode("TICKET_OPEN")).thenReturn(Optional.of(enabledDef));
+        when(settingEntryRepository.findByMemberIdAndEventTypeCode(1L, "TICKET_OPEN"))
+                .thenReturn(Mono.just(existing));
+        when(settingEntryRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(settingCachePort.isCached(1L)).thenReturn(Mono.just(true));
+        when(settingCachePort.put(eq(1L), anyString(), anyBoolean())).thenReturn(Mono.empty());
+
+        // WHEN
+        SettingResult result = settingService.updateSetting(1L,
+                new UpdateSettingCommand("TICKET_OPEN", false)).block();
+
+        // THEN
+        assertThat(result).isNotNull();
+        assertThat(result.enabled()).isFalse();
     }
 }

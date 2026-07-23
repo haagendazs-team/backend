@@ -5,6 +5,10 @@ import com.haagendazs.domain.model.EventTypeDefinition;
 import com.haagendazs.domain.model.NotificationEnvelope;
 import com.haagendazs.domain.repository.SettingEntryRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.stream.RecordId;
@@ -24,6 +28,24 @@ public class FanoutService {
     private final BufferedChunkService bufferedChunkService;
     private final PayloadParser payloadParser;
     private final NotificationProperties properties;
+    private final MeterRegistry meterRegistry;
+
+    private Counter fanoutTotal;
+    private Counter fanoutErrorTotal;
+    private Timer fanoutDuration;
+
+    @PostConstruct
+    void initMetrics() {
+        fanoutTotal = Counter.builder("fanout")
+                .description("팬아웃 처리 완료 수")
+                .register(meterRegistry);
+        fanoutErrorTotal = Counter.builder("fanout_error")
+                .description("팬아웃 처리 실패 수")
+                .register(meterRegistry);
+        fanoutDuration = Timer.builder("fanout_duration")
+                .description("팬아웃 1건 처리 지연")
+                .register(meterRegistry);
+    }
 
     public Mono<Boolean> fanout(Event event, EventTypeDefinition definition, String payload) {
         if (definition.isSingleTarget()) {
@@ -32,12 +54,16 @@ public class FanoutService {
         return fanoutBroadcast(event, definition, payload);
     }
 
-    public Mono<Void> fanoutBuffered(Event event, EventTypeDefinition definition, String payload,
-                                      String streamKey, RecordId recordId) {
-        if (definition.isSingleTarget()) {
-            return fanoutSingleTargetBuffered(event, payload, streamKey, recordId);
-        }
-        return fanoutBroadcastBuffered(event, definition, payload, streamKey, recordId);
+    public Mono<Void> fanoutBuffered(Event event, EventTypeDefinition definition, String payload, String streamKey, RecordId recordId) {
+        long startNs = System.nanoTime();
+        Mono<Void> fanout = definition.isSingleTarget()
+                ? fanoutSingleTargetBuffered(event, payload, streamKey, recordId)
+                : fanoutBroadcastBuffered(event, definition, payload, streamKey, recordId);
+        return fanout.doOnSuccess(v -> {
+                    fanoutTotal.increment();
+                    fanoutDuration.record(System.nanoTime() - startNs, java.util.concurrent.TimeUnit.NANOSECONDS);
+                })
+                .doOnError(e -> fanoutErrorTotal.increment());
     }
 
     private Mono<Boolean> fanoutSingleTarget(Event event, String payload) {
@@ -51,8 +77,7 @@ public class FanoutService {
         }
     }
 
-    private Mono<Void> fanoutSingleTargetBuffered(Event event, String payload,
-                                                   String streamKey, RecordId recordId) {
+    private Mono<Void> fanoutSingleTargetBuffered(Event event, String payload, String streamKey, RecordId recordId) {
         try {
             NotificationEnvelope envelope = payloadParser.parse(payload);
             Long memberId = payloadParser.extractTargetMemberId(envelope);
@@ -74,8 +99,7 @@ public class FanoutService {
                 .any(failed -> failed);
     }
 
-    private Mono<Void> fanoutBroadcastBuffered(Event event, EventTypeDefinition definition,
-                                                String payload, String streamKey, RecordId recordId) {
+    private Mono<Void> fanoutBroadcastBuffered(Event event, EventTypeDefinition definition, String payload, String streamKey, RecordId recordId) {
         return fetchAllMemberIds(definition)
                 .buffer(properties.fanout().chunkSize())
                 .flatMap(chunk -> bufferedChunkService.enqueueChunk(event, chunk, payload, streamKey, recordId)
@@ -87,10 +111,8 @@ public class FanoutService {
     }
 
     private Flux<Long> fetchAllMemberIds(EventTypeDefinition definition) {
-        int chunkSize = properties.fanout().chunkSize();
-        String code = definition.getCode();
-        return fetchAllPaged(offset ->
-                settingEntryRepository.findMemberIdsByEventTypeCode(code, offset, chunkSize));
+        return fetchAllPaged(offset -> settingEntryRepository
+                .findMemberIdsByEventTypeCode(definition.getCode(), offset, properties.fanout().chunkSize()));
     }
 
     private Flux<Long> fetchAllPaged(java.util.function.LongFunction<Flux<Long>> fetcher) {
