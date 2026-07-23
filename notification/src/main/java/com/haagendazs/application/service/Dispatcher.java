@@ -1,6 +1,7 @@
 package com.haagendazs.application.service;
 
 import com.haagendazs.application.dto.NotificationResult;
+import com.haagendazs.application.port.SettingCachePort;
 import com.haagendazs.application.port.SseNotificationPort;
 import com.haagendazs.application.sender.NotificationSender;
 import com.haagendazs.domain.model.*;
@@ -28,6 +29,7 @@ public class Dispatcher {
     private final ChannelRepository channelRepository;
     private final HistoryRepository historyRepository;
     private final SettingEntryRepository settingEntryRepository;
+    private final SettingCachePort settingCachePort;
     private final SseNotificationPort sseNotificationPort;
     private final Map<ChannelType, NotificationSender> senderMap;
 
@@ -36,6 +38,7 @@ public class Dispatcher {
             ChannelRepository channelRepository,
             HistoryRepository historyRepository,
             SettingEntryRepository settingEntryRepository,
+            SettingCachePort settingCachePort,
             SseNotificationPort sseNotificationPort,
             List<NotificationSender> senders
     ) {
@@ -43,6 +46,7 @@ public class Dispatcher {
         this.channelRepository = channelRepository;
         this.historyRepository = historyRepository;
         this.settingEntryRepository = settingEntryRepository;
+        this.settingCachePort = settingCachePort;
         this.sseNotificationPort = sseNotificationPort;
         this.senderMap = senders.stream()
                 .collect(Collectors.toMap(NotificationSender::channelType, Function.identity()));
@@ -52,10 +56,7 @@ public class Dispatcher {
         return notificationRepository.existsByEventIdAndMemberId(event.getId(), memberId)
                 .filter(exists -> !exists)
                 .switchIfEmpty(Mono.just(true).filter(v -> false))
-                .flatMap(ignored -> settingEntryRepository
-                        .findByMemberIdAndEventTypeCode(memberId, event.getEventTypeCode())
-                        .map(SettingEntry::isEnabled)
-                        .defaultIfEmpty(true))
+                .flatMap(ignored -> resolveAlertEnabled(memberId, event.getEventTypeCode()))
                 .filter(enabled -> enabled)
                 .flatMap(ignored -> notificationRepository.save(Notification.create(memberId, event.getId())))
                 .flatMap(notification -> {
@@ -98,6 +99,14 @@ public class Dispatcher {
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(e -> Mono.just(
                         History.failed(notificationId, channel.getChannelType(), e.getMessage())));
+    }
+
+    private Mono<Boolean> resolveAlertEnabled(Long memberId, String eventTypeCode) {
+        return settingCachePort.isAlertEnabled(memberId, eventTypeCode)
+                .switchIfEmpty(settingEntryRepository
+                        .findByMemberIdAndEventTypeCode(memberId, eventTypeCode)
+                        .map(SettingEntry::isEnabled)
+                        .defaultIfEmpty(true));
     }
 
     private Flux<Boolean> sendToChannels(Long notificationId, List<Channel> channels,

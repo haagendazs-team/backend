@@ -21,12 +21,8 @@ public class EventTypeController {
     public Mono<EventTypeResponse> register(@Valid @RequestBody RegisterEventTypeRequest request) {
         return eventTypeRegistrationService.register(
                         request.code(),
-                        request.streamKey(),
                         request.scheduled(),
-                        request.singleTarget(),
-                        request.memberIdField(),
-                        request.scheduledAtField(),
-                        request.resolvedOffsetMinutes()
+                        request.singleTarget()
                 )
                 .map(EventTypeResponse::of);
     }

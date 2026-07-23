@@ -5,7 +5,6 @@ import com.haagendazs.application.service.ScheduledNotificationProcessor;
 import com.haagendazs.domain.repository.EventTypeRepository;
 import com.haagendazs.infrastructure.config.NotificationProperties;
 import com.haagendazs.infrastructure.config.RedisPubSubConfig;
-import com.haagendazs.infrastructure.consumer.StreamSubscriptionManager;
 import com.haagendazs.infrastructure.registry.EventTypeRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +27,6 @@ public class ScheduledTriggerSubscriber {
     private final ChannelTopic scheduledTriggerTopic;
     private final ChannelTopic stuckRecoveryTopic;
     private final EventTypeRegistry registry;
-    private final StreamSubscriptionManager subscriptionManager;
     private final EventTypeRepository eventTypeRepository;
     private final ChannelTopic eventTypeRegisteredTopic;
 
@@ -53,7 +51,6 @@ public class ScheduledTriggerSubscriber {
                     eventTypeRepository.findByCode(code)
                             .doOnNext(def -> {
                                 registry.register(def);
-                                subscriptionManager.startSubscription(def);
                             })
                             .subscribe();
                 });

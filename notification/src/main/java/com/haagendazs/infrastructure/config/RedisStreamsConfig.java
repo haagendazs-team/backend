@@ -15,6 +15,7 @@ import java.time.Duration;
 public class RedisStreamsConfig {
 
     public static final String NOTIFICATION_GROUP = "notification-group";
+    public static final String STREAM_KEY = "notif:stream:events";
     public static final int STREAM_MAX_LEN = 10_000;
     private static final Duration POLL_TIMEOUT = Duration.ofSeconds(2);
 

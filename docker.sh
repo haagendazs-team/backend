@@ -113,9 +113,12 @@ cmd_service() {
             exit 1 ;;
     esac
 
+    echo "[build] $service gradle 빌드 중..."
+    ./gradlew ":${service}:build" -x test --quiet || { echo "오류: gradle 빌드 실패" >&2; exit 1; }
+
     echo "[service] $service 및 의존 인프라 기동: $deps"
     docker compose -f "$COMPOSE_FILE" up -d --no-recreate $deps
-    docker compose -f "$COMPOSE_FILE" up -d --no-recreate "$service"
+    docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --no-deps "$service"
 }
 
 cmd_ps() {

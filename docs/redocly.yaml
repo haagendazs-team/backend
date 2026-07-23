@@ -1,0 +1,21 @@
+apis:
+  notification-async:
+    root: asyncapi.yml
+
+# 향후 proto 추가 시 아래 주석 해제
+# notification-proto:
+#   root: proto/<service>.openapi.yaml
+
+rules:
+  no-unused-components: warn
+  operation-description: warn
+  operation-operationId: error
+  operation-summary: warn
+  tag-description: warn
+
+lint:
+  extends:
+    - recommended
+
+bundleOptions:
+  output: ../build/docs/bundled

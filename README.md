@@ -154,18 +154,30 @@ PR을 `develop`으로 올리면 자동 실행됩니다.
 Client
   │
   ▼
-Gateway (8080) ── JWT 검증
+Gateway (8080) ── JWT 검증                          [Blue/Green]
   │
-  ├── member       (8084) ── PostgreSQL ── Kafka
-  ├── payment      (8083) ── PostgreSQL ── Kafka
-  ├── search       (8082) ── PostgreSQL ── Elasticsearch ── Kafka
-  ├── notification (8081) ── PostgreSQL ── Redis (Streams + Pub/Sub) ── Kafka
-  └── chat         (8085) ── PostgreSQL ── Redis ── Kafka
+  ├── member       (8084) ── PostgreSQL ── Kafka    [Rolling]
+  ├── payment      (8083) ── PostgreSQL ── Kafka    [Rolling]
+  ├── search       (8082) ── PostgreSQL ── Elasticsearch ── Kafka  [Rolling]
+  ├── notification (8081) ── PostgreSQL ── Redis (Streams + Pub/Sub) ── Kafka  [Rolling + Drain]
+  └── chat         (8085) ── PostgreSQL ── Redis ── Kafka          [Rolling + Drain]
 
 인프라 기동 순서: config-server → discovery → [서비스]
 ```
 
+* rds 사용안함 ec2.db.t4.micro
+* 서비스는 스케일 아웃 구조
+
 **SSE 멀티 인스턴스:** 알림 서비스는 Redis Pub/Sub으로 모든 인스턴스에 브로드캐스트하여 스케일아웃 시에도 SSE 세션을 정확히 전달합니다.
+
+## 배포 전략
+
+| 서비스 | 전략 | 이유 |
+|--------|------|------|
+| `config-server` / `discovery` | Blue/Green | 전체 서비스가 의존 — 순단 시 연쇄 장애 위험 |
+| `gateway` | Blue/Green | 라우팅 룰 변경은 전/후 명확히 달라 롤백 단위 필요 |
+| `member` / `payment` / `search` | Rolling | 무상태에 가까운 비즈니스 로직 — 하위 호환 DB 마이그레이션 전제 |
+| `notification` / `chat` | Rolling + Connection Drain | SSE·WebSocket 연결 유지 필요 — 기존 연결 소진 후 인스턴스 종료 |
 
 ## Config Server
 

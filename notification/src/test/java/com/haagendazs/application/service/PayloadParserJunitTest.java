@@ -1,14 +1,11 @@
 package com.haagendazs.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.haagendazs.domain.model.EventTypeDefinition;
-import com.haagendazs.infrastructure.config.NotificationProperties;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.haagendazs.domain.model.NotificationEnvelope;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -16,121 +13,106 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@ExtendWith(MockitoExtension.class)
 class PayloadParserJunitTest {
 
-    @InjectMocks
     private PayloadParser payloadParser;
 
-    @Mock
-    private NotificationProperties properties;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @Test
-    @DisplayName("memberIdField 경로로 memberId를 추출한다")
-    void extractMemberId_usesDefinitionField() throws Exception {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "PAYMENT_COMPLETED", "notif:stream:payment.completed",
-                false, true, "memberId", null, 0);
-        String payload = "{\"memberId\":42,\"amount\":1000}";
-
-        Long result = parser.extractMemberId(payload, def);
-
-        assertThat(result).isEqualTo(42L);
+    @BeforeEach
+    void setUp() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        payloadParser = new PayloadParser(objectMapper);
     }
 
     @Test
-    @DisplayName("memberId 필드 없으면 IllegalArgumentException 발생")
-    void extractMemberId_throwsWhenFieldMissing() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "PAYMENT_COMPLETED", "notif:stream:payment.completed",
-                false, true, "memberId", null, 0);
-        String payload = "{\"amount\":1000}";
+    @DisplayName("정상 envelope JSON을 파싱한다")
+    void parse_validEnvelope_returnsEnvelope() {
+        String json = """
+                {"memberId":1,"isDispatchType":"IMMEDIATE","scheduledAt":null,"payload":{}}
+                """;
 
-        assertThatThrownBy(() -> parser.extractMemberId(payload, def))
+        NotificationEnvelope result = payloadParser.parse(json);
+
+        assertThat(result.memberId()).isEqualTo(1L);
+        assertThat(result.isDispatchType()).isEqualTo(NotificationEnvelope.DispatchType.IMMEDIATE);
+    }
+
+    @Test
+    @DisplayName("raw JSON에서 eventTypeCode를 추출한다")
+    void extractEventTypeCode_returnsCode_whenPresent() {
+        String json = """
+                {"eventTypeCode":"PAYMENT_COMPLETED","memberId":1,"isDispatchType":"IMMEDIATE","payload":{}}
+                """;
+
+        assertThat(payloadParser.extractEventTypeCode(json)).isEqualTo("PAYMENT_COMPLETED");
+    }
+
+    @Test
+    @DisplayName("eventTypeCode 누락 시 IllegalArgumentException 발생")
+    void extractEventTypeCode_throwsWhenMissing() {
+        String json = """
+                {"memberId":1,"isDispatchType":"IMMEDIATE","payload":{}}
+                """;
+
+        assertThatThrownBy(() -> payloadParser.extractEventTypeCode(json))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("scheduledAtField가 null이면 빈 Optional 반환")
-    void extractScheduledAt_returnsEmpty_whenNoScheduledAtField() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "PAYMENT_COMPLETED", "notif:stream:payment.completed",
-                false, true, "memberId", null, 0);
-
-        Optional<LocalDateTime> result = parser.extractScheduledAt("{}", def);
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    @DisplayName("memberId 필드 값이 null이면 IllegalArgumentException 발생")
-    void extractMemberId_throwsWhenFieldNull() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.open",
-                false, true, "memberId", null, 0);
-        String payload = "{\"memberId\":null}";
-
-        assertThatThrownBy(() -> parser.extractMemberId(payload, def))
+    @DisplayName("잘못된 JSON이면 IllegalArgumentException 발생")
+    void parse_invalidJson_throwsException() {
+        assertThatThrownBy(() -> payloadParser.parse("not-json"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("memberId 필드 값이 문자열이면 IllegalArgumentException 발생")
-    void extractMemberId_throwsWhenFieldNotIntegral() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.open",
-                false, true, "memberId", null, 0);
-        String payload = "{\"memberId\":\"abc\"}";
+    @DisplayName("memberId가 있으면 extractTargetMemberId 정상 반환")
+    void extractTargetMemberId_returnsValue_whenPresent() {
+        NotificationEnvelope envelope = NotificationEnvelope.of(
+                99L, NotificationEnvelope.DispatchType.IMMEDIATE, null, null);
 
-        assertThatThrownBy(() -> parser.extractMemberId(payload, def))
+        assertThat(payloadParser.extractTargetMemberId(envelope)).isEqualTo(99L);
+    }
+
+    @Test
+    @DisplayName("memberId가 null이면 IllegalArgumentException 발생")
+    void extractTargetMemberId_throwsWhenNull() {
+        NotificationEnvelope envelope = NotificationEnvelope.of(
+                null, NotificationEnvelope.DispatchType.IMMEDIATE, null, null);
+
+        assertThatThrownBy(() -> payloadParser.extractTargetMemberId(envelope))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    @DisplayName("scheduledAtField가 있고 유효한 미래 시각이면 Optional 반환")
-    void extractScheduledAt_withValidFutureTime_returnsOptional() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
+    @DisplayName("IMMEDIATE dispatch이면 빈 Optional 반환")
+    void extractScheduledAt_returnsEmpty_whenImmediate() {
+        NotificationEnvelope envelope = NotificationEnvelope.of(
+                1L, NotificationEnvelope.DispatchType.IMMEDIATE, null, null);
+
+        assertThat(payloadParser.extractScheduledAt(envelope)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SCHEDULED이고 미래 시각이면 Optional 반환")
+    void extractScheduledAt_returnsFutureTime_whenScheduled() {
         LocalDateTime future = LocalDateTime.now().plusHours(2);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "GAME_START", "notif:stream:game.start",
-                false, true, "memberId", "scheduledAt", 30);
-        String payload = "{\"memberId\":1,\"scheduledAt\":\"" + future + "\"}";
+        NotificationEnvelope envelope = NotificationEnvelope.of(
+                1L, NotificationEnvelope.DispatchType.SCHEDULED, future, null);
 
-        Optional<LocalDateTime> result = parser.extractScheduledAt(payload, def);
+        Optional<LocalDateTime> result = payloadParser.extractScheduledAt(envelope);
 
         assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(future);
     }
 
     @Test
-    @DisplayName("scheduledAtField 있지만 필드 누락 시 빈 Optional 반환")
-    void extractScheduledAt_withMissingField_returnsEmpty() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "GAME_START", "notif:stream:game.start",
-                false, true, "memberId", "scheduledAt", 0);
-        String payload = "{\"memberId\":1}";
+    @DisplayName("SCHEDULED이지만 과거 시각이면 빈 Optional 반환")
+    void extractScheduledAt_returnsEmpty_whenPastTime() {
+        LocalDateTime past = LocalDateTime.now().minusHours(1);
+        NotificationEnvelope envelope = NotificationEnvelope.of(
+                1L, NotificationEnvelope.DispatchType.SCHEDULED, past, null);
 
-        Optional<LocalDateTime> result = parser.extractScheduledAt(payload, def);
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    @DisplayName("잘못된 JSON 페이로드 시 IllegalArgumentException 발생")
-    void extractMemberId_throwsWhenInvalidJson() {
-        PayloadParser parser = new PayloadParser(objectMapper, properties);
-        EventTypeDefinition def = EventTypeDefinition.of(
-                "TICKET_OPEN", "notif:stream:ticket.open",
-                false, true, "memberId", null, 0);
-
-        assertThatThrownBy(() -> parser.extractMemberId("not-json", def))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(payloadParser.extractScheduledAt(envelope)).isEmpty();
     }
 }

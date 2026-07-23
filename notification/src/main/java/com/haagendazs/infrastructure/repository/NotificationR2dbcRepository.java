@@ -25,6 +25,9 @@ public interface NotificationR2dbcRepository extends ReactiveCrudRepository<Noti
     @Query("SELECT member_id FROM notification.notifications WHERE event_id = :eventId AND member_id = ANY(:memberIds)")
     Flux<Long> findMemberIdsByEventIdAndMemberIdIn(Long eventId, Long[] memberIds);
 
+    @Query("SELECT * FROM notification.notifications WHERE member_id = :memberId AND id > :lastId ORDER BY id ASC LIMIT :limit")
+    Flux<Notification> findByMemberIdAndIdGreaterThanOrderByIdAsc(Long memberId, Long lastId, int limit);
+
     @Modifying
     @Query("UPDATE notification.notifications SET is_read = true WHERE member_id = :memberId AND is_read = false")
     Mono<Void> markAllReadByMemberId(Long memberId);
