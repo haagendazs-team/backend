@@ -7,7 +7,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -131,5 +135,47 @@ class SsePingAckServiceJunitTest {
 
         double afterAdd = registry.get("sse_ping_window_total").gauge().value();
         assertThat(afterAdd).isEqualTo(3.0);
+    }
+
+    @Test
+    @DisplayName("evictExpired — 윈도우 만료된 항목은 query 시 제거된다")
+    @SuppressWarnings("unchecked")
+    void evictExpired_removesStaleEntries() throws Exception {
+        // GIVEN: 항목을 추가한 뒤 store의 deque에 직접 접근해 timestampMs를 과거로 교체
+        service.record(1L, PingStatus.성공, LocalDateTime.now());
+
+        Field storeField = SsePingAckService.class.getDeclaredField("store");
+        storeField.setAccessible(true);
+        Map<Long, Deque<?>> store = (Map<Long, Deque<?>>) storeField.get(service);
+
+        // PingEntry는 private record — 전체 deque를 새로운 만료 항목으로 교체
+        // timestampMs=0 항목을 만들 방법이 없으므로 deque 자체를 비워 eviction 진입 후 즉시 루프 종료 경로를 커버
+        // 대신 WINDOW_MS를 0으로 만들어 현재 항목도 만료되게 한다
+        Field windowField = SsePingAckService.class.getDeclaredField("WINDOW_MS");
+        windowField.setAccessible(true);
+        // WINDOW_MS는 static final long — reflection으로 변경 후 query() 호출
+        // Java 25에서는 허용되지 않을 수 있으므로, 빈 deque를 주입하는 방식으로 대체
+        // 항목이 있는 deque에서 evictExpired가 실행되도록: record()로 항목 추가 → 즉시 query()
+        // 이미 위에서 record()를 했으므로 query() 호출 시 evictExpired가 실행되지만 timestampMs가 최신이라 제거 안 됨
+
+        // 실제 eviction 루프 바디(pollFirst)를 커버하려면:
+        // store에 timestampMs=0인 PingEntry를 직접 주입해야 한다
+        Deque<?> deque = store.get(1L);
+        // deque 클리어 후 만료된 항목(timestampMs=0) 주입
+        Class<?> pingEntryClass = Class.forName("com.haagendazs.application.service.SsePingAckService$PingEntry");
+        var ctor = pingEntryClass.getDeclaredConstructor(LocalDateTime.class, PingStatus.class, long.class);
+        ctor.setAccessible(true);
+        Object expiredEntry = ctor.newInstance(LocalDateTime.now().minusHours(2), PingStatus.성공, 0L);
+
+        synchronized (deque) {
+            ((Deque<Object>) deque).clear();
+            ((Deque<Object>) deque).addLast(expiredEntry);
+        }
+
+        // WHEN: query() 호출 시 evictExpired → pollFirst() 실행
+        PingResultResponse result = service.query(1L);
+
+        // THEN: 만료된 항목이 제거되어 0이 반환된다
+        assertThat(result.totalSent()).isEqualTo(0);
     }
 }

@@ -135,7 +135,7 @@ class SseEmitterManagerJunitTest {
         NotificationResponse response = new NotificationResponse(
                 1L, "GAME_START", "payload", false, Instant.now()
         );
-        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+        sseEmitterManager.subscribe(1L, Flux.empty()).subscribe();
 
         sseEmitterManager.sendLocal(1L, response);
 
@@ -146,16 +146,19 @@ class SseEmitterManagerJunitTest {
     @Test
     @DisplayName("sendHeartbeat() — 활성 세션에 ping 이벤트 전달")
     void sendHeartbeat_deliversPingToActiveSessions() {
-        List<ServerSentEvent<Object>> received = new ArrayList<>();
+        Flux<ServerSentEvent<Object>> stream = sseEmitterManager.subscribe(1L, Flux.empty())
+                .take(1);
 
-        sseEmitterManager.subscribe(1L, List.of(), Flux.empty())
-                .take(1)
-                .subscribe(received::add);
+        // publishOn(boundedElastic) 때문에 emit과 onNext 처리가 비동기 — 별도 스레드에서 heartbeat 발송
+        new Thread(() -> {
+            try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+            sseEmitterManager.sendHeartbeat();
+        }).start();
 
-        sseEmitterManager.sendHeartbeat();
+        ServerSentEvent<Object> event = stream.blockFirst(Duration.ofSeconds(3));
 
-        assertThat(received).hasSize(1);
-        assertThat(received.get(0).event()).isEqualTo("ping");
+        assertThat(event).isNotNull();
+        assertThat(event.event()).isEqualTo("ping");
     }
 
     @Test
@@ -163,10 +166,10 @@ class SseEmitterManagerJunitTest {
     void subscribe_reconnect_terminatesPreviousSession() {
         List<ServerSentEvent<Object>> first = new ArrayList<>();
 
-        sseEmitterManager.subscribe(1L, List.of(), Flux.empty())
+        sseEmitterManager.subscribe(1L,Flux.empty())
                 .subscribe(first::add, e -> {}, () -> {});
 
-        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+        sseEmitterManager.subscribe(1L, Flux.empty()).subscribe();
 
         // 이전 세션은 complete 신호로 종료되어 추가 이벤트 수신 불가
         int countBefore = first.size();
@@ -179,7 +182,7 @@ class SseEmitterManagerJunitTest {
     void sendLocal_and_sendHeartbeat_concurrent_noSerializationFailure() throws InterruptedException {
         int threadCount = 10;
         // sse_errors_total{reason=emit_failed} 카운터로 직렬화 실패 감지
-        sseEmitterManager.subscribe(1L, List.of(), Flux.empty()).subscribe();
+        sseEmitterManager.subscribe(1L,Flux.empty()).subscribe();
 
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threadCount);
