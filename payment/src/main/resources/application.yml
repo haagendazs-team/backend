@@ -16,12 +16,33 @@ spring:
       minimum-idle: ${HIKARI_MIN_IDLE:2}
   jpa:
     hibernate:
-      ddl-auto: validate
+      # TODO: Flyway 테이블 migration이 준비되면 validate로 전환하기
+      ddl-auto: update
     open-in-view: false
   flyway:
     locations: classpath:db/migration
     schemas: payment
     table: flyway_schema_history
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+    consumer:
+      group-id: payment
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+    topics:
+      workspace-created: member.workspace.created.v1
+      subscription-initialized: payment.subscription-initialized.v1
+      subscription-changed: payment.subscription-changed.v1
+      payment-notification: payment.notif.push.v1
+      workspace-subscribed: payment.workspace_subscribed.v1
+      workspace-subscription-expired: payment.workspace_subscription_expired.v1
 
 management:
   endpoints:
@@ -38,3 +59,13 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+
+payment:
+  seed-data:
+    enabled: true
+  customer-key:
+    hash-secret: local-customer-key-hash-secret #${PAYMENT_CUSTOMER_KEY_HASH_SECRET}
+    encrypt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= #${PAYMENT_CUSTOMER_KEY_ENCRYPT_SECRET}
+
+toss:
+  secret-key: test_sk_GePWvyJnrKJ2EbDPBQ6eVgLzN97E #${TOSS_SECRET_KEY}

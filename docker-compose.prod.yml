@@ -44,25 +44,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  elasticsearch:
-    image: elasticsearch:8.13.4
-    container_name: haagendazs-elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-      - bootstrap.memory_lock=false
-    ports:
-      - "${ES_PORT:-9200}:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\\|yellow\"'"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-
   kafka:
     image: apache/kafka:4.0.0
     container_name: haagendazs-kafka
@@ -237,33 +218,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  search:
-    build:
-      context: ./search
-      dockerfile: Dockerfile
-    environment:
-      - EUREKA_SERVER_URI=${EUREKA_SERVER_URI:-http://discovery:8761/eureka}
-      - CONFIG_SERVER_URI=http://config-server:8888
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB:-haagendazs}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - ES_HOST=elasticsearch
-      - ES_PORT=9200
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - JAVA_TOOL_OPTIONS=-Xmx256m
-    expose:
-      - "8082"
-    depends_on:
-      discovery:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    restart: unless-stopped
-
   chat:
     build:
       context: ./chat
@@ -297,5 +251,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  es-data:
   kafka-data:

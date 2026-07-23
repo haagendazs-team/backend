@@ -36,7 +36,6 @@ def startOrder = [
     'gateway',
     'member',
     'payment',
-    'search',
     'notification',
     'chat'
 ]
@@ -141,7 +140,6 @@ def moduleInfra = [
     'chat'          : ['postgres', 'redis', 'kafka', 'config-server', 'discovery'],
     'member'        : ['postgres', 'kafka', 'config-server', 'discovery'],
     'payment'       : ['postgres', 'kafka', 'config-server', 'discovery'],
-    'search'        : ['postgres', 'elasticsearch', 'kafka', 'config-server', 'discovery'],
 ]
 
 subprojects {
