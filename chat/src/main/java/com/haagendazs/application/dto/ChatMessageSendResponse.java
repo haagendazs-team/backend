@@ -16,6 +16,6 @@ public record ChatMessageSendResponse(
     Long senderId,
     String content,
     LocalDateTime createdAt,
-    LocalDateTime senddAt
+    LocalDateTime sendAt
 ) {}
 

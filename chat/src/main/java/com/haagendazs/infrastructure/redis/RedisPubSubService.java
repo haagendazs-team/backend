@@ -25,6 +25,7 @@ public class RedisPubSubService implements MessageListener {
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
+        log.info("REDIS onMessage 호출됨: {}", new String(message.getBody()));
         try {
             String payload = new String(message.getBody());
             ChatMessageSendResponse response = objectMapper.readValue(payload, ChatMessageSendResponse.class);

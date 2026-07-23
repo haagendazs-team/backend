@@ -1,9 +1,12 @@
 package com.haagendazs.presentation.stomp;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -35,7 +38,19 @@ public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 //        /publish로 시작하는 url패턴으로 메시지가 발행되면 @Controller 객체의 @MessageMapping메서드로 라우팅
         registry.setApplicationDestinationPrefixes("/publish");
 //        /topic/1형태로 메시지를 수신(subscribe)해야 함을 설정
-        registry.enableSimpleBroker("/topic");
+//        10초 간격 하트비트: 클라이언트가 응답 없으면 CloseStatus.SESSION_NOT_RELIABLE로 강제 종료 (하트비트 타임아웃 계측의 전제조건)
+        registry.enableSimpleBroker("/topic")
+                .setHeartbeatValue(new long[]{10000, 10000})
+                .setTaskScheduler(heartbeatTaskScheduler());
+    }
+
+    @Bean
+    public TaskScheduler heartbeatTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("stomp-heartbeat-");
+        scheduler.initialize();
+        return scheduler;
     }
 
     //    웹소켓요청(connect, subscribe, disconnect)등의 요청시에는 http header등 http메시지를 넣어 올 수 있고,
