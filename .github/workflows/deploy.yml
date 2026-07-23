@@ -1,139 +1,139 @@
-name: _deploy-service
-
-on:
-  workflow_call:
-    inputs:
-      service:     { required: true, type: string }
-      environment: { required: false, type: string, default: develop }
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  AWS_REGION: ap-northeast-2
-  PROJECT: haagendazs
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # ---- 서비스별 전략/리소스 이름 결정 ----
-      - id: cfg
-        env: { SVC: "${{ inputs.service }}" }
-        run: |
-          case "$SVC" in
-            gateway)            strategy=bluegreen ;;   # 라우팅 원자성 → 리스너 스왑
-            notification|chat)  strategy=rolling   ;;   # 드레인은 ASG Lifecycle Hook이 처리
-            *)                  strategy=rolling   ;;
-          esac
-          {
-            echo "strategy=$strategy"
-            echo "asg=${PROJECT}-${SVC}-asg"
-            echo "repo=${PROJECT}/${SVC}"
-          } >> "$GITHUB_OUTPUT"
-
-      # ---- 빌드 (Gradle multi-module, 캐시) ----
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '25' }
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Build bootJar
-        run: ./gradlew :${{ inputs.service }}:bootJar -x test
-
-      # ---- AWS 인증 (OIDC) + ECR ----
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - uses: aws-actions/amazon-ecr-login@v2
-        id: ecr
-
-      # ---- 이미지 빌드/푸시 (태그 = git SHA) ----
-      - name: Build & push image
-        env: { REG: "${{ steps.ecr.outputs.registry }}" }
-        run: |
-          IMG="$REG/${{ steps.cfg.outputs.repo }}:${GITHUB_SHA::12}"
-          docker build -t "$IMG" -f "${{ inputs.service }}/Dockerfile" .
-          docker push "$IMG"
-          echo "IMG=$IMG" >> "$GITHUB_ENV"
-
-      # ---- 배포 포인터 갱신: 인스턴스가 부팅 시 이 값을 읽어 pull ----
-      - name: Update deploy pointer (SSM)
-        run: |
-          aws ssm put-parameter --overwrite \
-            --name "/${PROJECT}/deploy/${{ inputs.service }}/image" \
-            --type String --value "$IMG"
-
-      # ---- 스택 상태 확인 (비용 스케줄로 DOWN이면 교체 대상 없음) ----
-      - id: state
-        run: |
-          desired=$(aws autoscaling describe-auto-scaling-groups \
-            --auto-scaling-group-names "${{ steps.cfg.outputs.asg }}" \
-            --query 'AutoScalingGroups[0].DesiredCapacity' --output text 2>/dev/null || echo 0)
-          echo "desired=${desired:-0}" >> "$GITHUB_OUTPUT"
-
-      - name: Deferred (stack is DOWN)
-        if: steps.state.outputs.desired == '0'
-        run: |
-          echo "::notice::스택 DOWN → 이미지 포인터만 갱신. 다음 UP(스케줄/Slack) 시 ${IMG} 로 기동됩니다."
-
-      # ========== ROLLING / ROLLING+DRAIN ==========
-      # 두 경우 워크플로는 동일. 드레인은 ASG Lifecycle Hook(120s)이 수행.
-      - name: Rolling instance refresh
-        if: steps.state.outputs.desired != '0' && steps.cfg.outputs.strategy == 'rolling'
-        run: |
-          ASG='${{ steps.cfg.outputs.asg }}'
-          ID=$(aws autoscaling start-instance-refresh \
-                 --auto-scaling-group-name "$ASG" \
-                 --preferences '{"MinHealthyPercentage":90,"InstanceWarmup":60,"ScaleInProtectedInstances":"Wait","StandbyInstances":"Wait"}' \
-                 --query InstanceRefreshId --output text)
-          echo "instance-refresh: $ID"
-          while true; do
-            ST=$(aws autoscaling describe-instance-refreshes \
-                   --auto-scaling-group-name "$ASG" --instance-refresh-ids "$ID" \
-                   --query 'InstanceRefreshes[0].Status' --output text)
-            case "$ST" in
-              Successful) echo "✅ refresh 완료"; break ;;
-              Failed|Cancelled|RollbackFailed|RollbackSuccessful)
-                echo "❌ refresh $ST"; exit 1 ;;
-              *) echo "…$ST"; sleep 20 ;;
-            esac
-          done
-
-      # ========== BLUE/GREEN (gateway) ==========
-      # 사전 인프라 제공(SSM): active-color, tg-blue-arn, tg-green-arn, listener-arn
-      # ASG 이름 규칙: haagendazs-gateway-blue-asg / -green-asg
-      - name: Blue/Green swap
-        if: steps.state.outputs.desired != '0' && steps.cfg.outputs.strategy == 'bluegreen'
-        run: |
-          p() { aws ssm get-parameter --name "/$PROJECT/gateway/$1" --query Parameter.Value --output text; }
-          ACTIVE=$(p active-color)                 # blue | green
-          if [ "$ACTIVE" = "blue" ]; then IDLE=green; else IDLE=blue; fi
-          IDLE_ASG="${PROJECT}-gateway-${IDLE}-asg"
-          IDLE_TG=$(p "tg-${IDLE}-arn")
-          LISTENER=$(p listener-arn)
-          BASE=$(aws ssm get-parameter --name "/$PROJECT/gateway/base-capacity" --query Parameter.Value --output text 2>/dev/null || echo 1)
-
-          echo "active=$ACTIVE → idle=$IDLE 로 신버전 배포"
-          # 1) 유휴 색상에 신버전 기동 + 새 인스턴스로 교체
-          aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$IDLE_ASG" --desired-capacity "$BASE"
-          RID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$IDLE_ASG" \
-                  --preferences '{"MinHealthyPercentage":100,"InstanceWarmup":60}' \
-                  --query InstanceRefreshId --output text)
-          while true; do
-            ST=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$IDLE_ASG" \
-                   --instance-refresh-ids "$RID" --query 'InstanceRefreshes[0].Status' --output text)
-            case "$ST" in Successful) break ;; Failed|Cancelled) echo "❌ $ST"; exit 1 ;; *) sleep 20 ;; esac
-          done
-          # 2) 유휴 타깃그룹 헬시 대기
-          aws elbv2 wait target-in-service --target-group-arn "$IDLE_TG"
-          # 3) 리스너 스왑 (원자적 전환)
-          aws elbv2 modify-listener --listener-arn "$LISTENER" \
-            --default-actions "Type=forward,TargetGroupArn=$IDLE_TG"
-          # 4) active-color 갱신 후 구 색상 스케일 인
-          aws ssm put-parameter --overwrite --name "/$PROJECT/gateway/active-color" --type String --value "$IDLE"
-          aws autoscaling update-auto-scaling-group \
-            --auto-scaling-group-name "${PROJECT}-gateway-${ACTIVE}-asg" --desired-capacity 0
-          echo "✅ 스왑 완료: 이제 활성 색상 = $IDLE (롤백은 리스너를 이전 TG로 되돌리면 됨)"
+#name: _deploy-service
+#
+#on:
+#  workflow_call:
+#    inputs:
+#      service:     { required: true, type: string }
+#      environment: { required: false, type: string, default: develop }
+#
+#permissions:
+#  id-token: write
+#  contents: read
+#
+#env:
+#  AWS_REGION: ap-northeast-2
+#  PROJECT: haagendazs
+#
+#jobs:
+#  deploy:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      # ---- 서비스별 전략/리소스 이름 결정 ----
+#      - id: cfg
+#        env: { SVC: "${{ inputs.service }}" }
+#        run: |
+#          case "$SVC" in
+#            gateway)            strategy=bluegreen ;;   # 라우팅 원자성 → 리스너 스왑
+#            notification|chat)  strategy=rolling   ;;   # 드레인은 ASG Lifecycle Hook이 처리
+#            *)                  strategy=rolling   ;;
+#          esac
+#          {
+#            echo "strategy=$strategy"
+#            echo "asg=${PROJECT}-${SVC}-asg"
+#            echo "repo=${PROJECT}/${SVC}"
+#          } >> "$GITHUB_OUTPUT"
+#
+#      # ---- 빌드 (Gradle multi-module, 캐시) ----
+#      - uses: actions/setup-java@v4
+#        with: { distribution: temurin, java-version: '25' }
+#      - uses: gradle/actions/setup-gradle@v4
+#      - name: Build bootJar
+#        run: ./gradlew :${{ inputs.service }}:bootJar -x test
+#
+#      # ---- AWS 인증 (OIDC) + ECR ----
+#      - uses: aws-actions/configure-aws-credentials@v4
+#        with:
+#          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+#          aws-region: ${{ env.AWS_REGION }}
+#      - uses: aws-actions/amazon-ecr-login@v2
+#        id: ecr
+#
+#      # ---- 이미지 빌드/푸시 (태그 = git SHA) ----
+#      - name: Build & push image
+#        env: { REG: "${{ steps.ecr.outputs.registry }}" }
+#        run: |
+#          IMG="$REG/${{ steps.cfg.outputs.repo }}:${GITHUB_SHA::12}"
+#          docker build -t "$IMG" -f "${{ inputs.service }}/Dockerfile" .
+#          docker push "$IMG"
+#          echo "IMG=$IMG" >> "$GITHUB_ENV"
+#
+#      # ---- 배포 포인터 갱신: 인스턴스가 부팅 시 이 값을 읽어 pull ----
+#      - name: Update deploy pointer (SSM)
+#        run: |
+#          aws ssm put-parameter --overwrite \
+#            --name "/${PROJECT}/deploy/${{ inputs.service }}/image" \
+#            --type String --value "$IMG"
+#
+#      # ---- 스택 상태 확인 (비용 스케줄로 DOWN이면 교체 대상 없음) ----
+#      - id: state
+#        run: |
+#          desired=$(aws autoscaling describe-auto-scaling-groups \
+#            --auto-scaling-group-names "${{ steps.cfg.outputs.asg }}" \
+#            --query 'AutoScalingGroups[0].DesiredCapacity' --output text 2>/dev/null || echo 0)
+#          echo "desired=${desired:-0}" >> "$GITHUB_OUTPUT"
+#
+#      - name: Deferred (stack is DOWN)
+#        if: steps.state.outputs.desired == '0'
+#        run: |
+#          echo "::notice::스택 DOWN → 이미지 포인터만 갱신. 다음 UP(스케줄/Slack) 시 ${IMG} 로 기동됩니다."
+#
+#      # ========== ROLLING / ROLLING+DRAIN ==========
+#      # 두 경우 워크플로는 동일. 드레인은 ASG Lifecycle Hook(120s)이 수행.
+#      - name: Rolling instance refresh
+#        if: steps.state.outputs.desired != '0' && steps.cfg.outputs.strategy == 'rolling'
+#        run: |
+#          ASG='${{ steps.cfg.outputs.asg }}'
+#          ID=$(aws autoscaling start-instance-refresh \
+#                 --auto-scaling-group-name "$ASG" \
+#                 --preferences '{"MinHealthyPercentage":90,"InstanceWarmup":60,"ScaleInProtectedInstances":"Wait","StandbyInstances":"Wait"}' \
+#                 --query InstanceRefreshId --output text)
+#          echo "instance-refresh: $ID"
+#          while true; do
+#            ST=$(aws autoscaling describe-instance-refreshes \
+#                   --auto-scaling-group-name "$ASG" --instance-refresh-ids "$ID" \
+#                   --query 'InstanceRefreshes[0].Status' --output text)
+#            case "$ST" in
+#              Successful) echo "✅ refresh 완료"; break ;;
+#              Failed|Cancelled|RollbackFailed|RollbackSuccessful)
+#                echo "❌ refresh $ST"; exit 1 ;;
+#              *) echo "…$ST"; sleep 20 ;;
+#            esac
+#          done
+#
+#      # ========== BLUE/GREEN (gateway) ==========
+#      # 사전 인프라 제공(SSM): active-color, tg-blue-arn, tg-green-arn, listener-arn
+#      # ASG 이름 규칙: haagendazs-gateway-blue-asg / -green-asg
+#      - name: Blue/Green swap
+#        if: steps.state.outputs.desired != '0' && steps.cfg.outputs.strategy == 'bluegreen'
+#        run: |
+#          p() { aws ssm get-parameter --name "/$PROJECT/gateway/$1" --query Parameter.Value --output text; }
+#          ACTIVE=$(p active-color)                 # blue | green
+#          if [ "$ACTIVE" = "blue" ]; then IDLE=green; else IDLE=blue; fi
+#          IDLE_ASG="${PROJECT}-gateway-${IDLE}-asg"
+#          IDLE_TG=$(p "tg-${IDLE}-arn")
+#          LISTENER=$(p listener-arn)
+#          BASE=$(aws ssm get-parameter --name "/$PROJECT/gateway/base-capacity" --query Parameter.Value --output text 2>/dev/null || echo 1)
+#
+#          echo "active=$ACTIVE → idle=$IDLE 로 신버전 배포"
+#          # 1) 유휴 색상에 신버전 기동 + 새 인스턴스로 교체
+#          aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$IDLE_ASG" --desired-capacity "$BASE"
+#          RID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$IDLE_ASG" \
+#                  --preferences '{"MinHealthyPercentage":100,"InstanceWarmup":60}' \
+#                  --query InstanceRefreshId --output text)
+#          while true; do
+#            ST=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$IDLE_ASG" \
+#                   --instance-refresh-ids "$RID" --query 'InstanceRefreshes[0].Status' --output text)
+#            case "$ST" in Successful) break ;; Failed|Cancelled) echo "❌ $ST"; exit 1 ;; *) sleep 20 ;; esac
+#          done
+#          # 2) 유휴 타깃그룹 헬시 대기
+#          aws elbv2 wait target-in-service --target-group-arn "$IDLE_TG"
+#          # 3) 리스너 스왑 (원자적 전환)
+#          aws elbv2 modify-listener --listener-arn "$LISTENER" \
+#            --default-actions "Type=forward,TargetGroupArn=$IDLE_TG"
+#          # 4) active-color 갱신 후 구 색상 스케일 인
+#          aws ssm put-parameter --overwrite --name "/$PROJECT/gateway/active-color" --type String --value "$IDLE"
+#          aws autoscaling update-auto-scaling-group \
+#            --auto-scaling-group-name "${PROJECT}-gateway-${ACTIVE}-asg" --desired-capacity 0
+#          echo "✅ 스왑 완료: 이제 활성 색상 = $IDLE (롤백은 리스너를 이전 TG로 되돌리면 됨)"
