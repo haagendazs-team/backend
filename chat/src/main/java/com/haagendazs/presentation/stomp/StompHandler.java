@@ -1,17 +1,23 @@
 package com.haagendazs.presentation.stomp;
 
+import com.haagendazs.application.dto.PresenceEvent;
+import com.haagendazs.application.service.PresenceService;
 import com.haagendazs.common.exception.BusinessException;
 import com.haagendazs.domain.exception.ChatErrorCode;
 import com.haagendazs.domain.repository.ChatParticipantRepository;
+import com.haagendazs.infrastructure.redis.RedisPubSubService;
+
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Component
@@ -20,7 +26,9 @@ public class StompHandler implements ChannelInterceptor {
 
     private final ChatParticipantRepository chatParticipantRepository;
     // TODO: JWT 검증 유틸(JwtTokenUtil, TokenPayload)이 common에 추가되면 주입받아 교체
-
+    private final PresenceService presenceService;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         final StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
@@ -39,6 +47,8 @@ public class StompHandler implements ChannelInterceptor {
             Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
             if (sessionAttributes != null) {
                 sessionAttributes.put("memberId", memberId);
+                presenceService.setOnline(memberId);
+                publishPresence(memberId, "ONLINE");
             }
             log.info("토큰 검증 완료, memberId={}", memberId);
         }
@@ -58,7 +68,31 @@ public class StompHandler implements ChannelInterceptor {
                 throw new BusinessException(ChatErrorCode.NOT_A_ROOM_MEMBER);
             }
         }
+        if (StompCommand.DISCONNECT == accessor.getCommand()) {
+            handleDisconnect(accessor);
+        }
+
         return message;
+    }
+
+    private void handleDisconnect(StompHeaderAccessor accessor) {
+        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+        if (sessionAttributes != null && sessionAttributes.get("memberId")!=null) {
+            Long memberId = (Long) sessionAttributes.get("memberId");
+            presenceService.setOffline(memberId);
+            publishPresence(memberId, "OFFLINE");
+        }
+
+
+    }
+    private void publishPresence(Long memberId, String status) {
+        try {
+            PresenceEvent event = new PresenceEvent(memberId, status);
+            String json = objectMapper.writeValueAsString(event);
+            stringRedisTemplate.convertAndSend("presence", json);
+        } catch (Exception e) {
+            log.error("presence 이벤트 발행 실패, memberId={}", memberId, e);
+        }
     }
 
     private String getValidToken(StompHeaderAccessor accessor) {
