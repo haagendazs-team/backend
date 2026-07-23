@@ -229,8 +229,13 @@ class PaymentToNotificationKafkaTest {
 
         notificationConsumer = new KafkaNotificationConsumer(
                 redisTemplate,
+                mock(com.haagendazs.application.service.EmailCertService.class),
+                mock(com.haagendazs.application.service.MemberCreatedService.class),
+                new com.fasterxml.jackson.databind.ObjectMapper(),
                 embeddedKafkaBroker.getBrokersAsString(),
-                java.util.List.of(paymentNotificationTopic)
+                java.util.List.of(paymentNotificationTopic),
+                "member.notif.email-cert.v1",
+                "member.created.v1"
         );
         notificationConsumer.start();
         return streamOps;
