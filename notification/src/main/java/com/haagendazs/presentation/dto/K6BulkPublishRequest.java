@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 
 public record K6BulkPublishRequest(
         @NotNull @Min(1) Long startMemberId,
-        @NotNull @Min(1) @Max(1000) Integer count,
+        @NotNull @Min(1) @Max(24000) Integer count,
         @NotBlank String eventTypeCode,
         Long publishedAt
 ) {}
