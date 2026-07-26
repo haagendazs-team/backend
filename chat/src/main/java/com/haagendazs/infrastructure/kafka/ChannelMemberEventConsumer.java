@@ -16,7 +16,7 @@ public class ChannelMemberEventConsumer {
     private final ChatParticipantSyncService chatParticipantSyncService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "member-workspace.chat.channel-member-joined.v1", groupId = "chat")
+    @KafkaListener(topics = "member.chat.channel_member_joined.v1", groupId = "chat")
     public void consumeChannelMemberJoined(String message) {
         try {
             ChannelMemberJoinedEvent event = objectMapper.readValue(message, ChannelMemberJoinedEvent.class);
@@ -26,7 +26,7 @@ public class ChannelMemberEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "member-workspace.chat.channel-member-deleted.v1", groupId = "chat")
+    @KafkaListener(topics = "member.chat.channel_member_deleted.v1", groupId = "chat")
     public void consumeChannelMemberDeleted(String message) {
         try {
             ChannelMemberDeletedEvent event = objectMapper.readValue(message, ChannelMemberDeletedEvent.class);

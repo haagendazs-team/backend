@@ -17,7 +17,7 @@ public class MemberEventConsumer {
     private final ChatMemberSyncService chatMemberSyncService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "member.chat.member-updated.v1", groupId = "chat")
+    @KafkaListener(topics = "member.updated.v1", groupId = "chat")
     public void consumeMemberUpdated(String message) {
         try {
             MemberUpdatedEvent event = objectMapper.readValue(message, MemberUpdatedEvent.class);
@@ -27,7 +27,7 @@ public class MemberEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "member.chat.member-deleted.v1", groupId = "chat")
+    @KafkaListener(topics = "member.deleted.v1", groupId = "chat")
     public void consumeMemberDeleted(String message) {
         try {
             MemberDeletedEvent event = objectMapper.readValue(message, MemberDeletedEvent.class);

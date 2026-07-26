@@ -15,7 +15,7 @@ public class WorkspaceMemberEventConsumer {
     private final ChatMemberSyncService chatMemberSyncService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "member-workspace.chat.workspace-member-joined.v1", groupId = "chat")
+    @KafkaListener(topics = "workspace-member.joined.v1", groupId = "chat")
     public void consumeWorkspaceMemberJoined(String message) {
         try {
             WorkspaceMemberJoinedEvent event = objectMapper.readValue(message, WorkspaceMemberJoinedEvent.class);

@@ -19,7 +19,7 @@ public class ChannelEventConsumer {
     private final ChatChannelSyncService chatChannelSyncService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "member-workspace.chat.channel-created.v1", groupId = "chat")
+    @KafkaListener(topics = "member.chat.channel_created.v1", groupId = "chat")
     public void consumeChannelCreated(String message) {
         try {
             ChannelCreatedEvent event = objectMapper.readValue(message, ChannelCreatedEvent.class);
@@ -29,7 +29,7 @@ public class ChannelEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "member-workspace.chat.channel-updated.v1", groupId = "chat")
+    @KafkaListener(topics = "member.chat.channel_updated.v1", groupId = "chat")
     public void consumeChannelUpdated(String message) {
         try {
             ChannelUpdatedEvent event = objectMapper.readValue(message, ChannelUpdatedEvent.class);
@@ -39,7 +39,7 @@ public class ChannelEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "member-workspace.chat.channel-deleted.v1", groupId = "chat")
+    @KafkaListener(topics = "member.chat.channel_deleted.v1", groupId = "chat")
     public void consumeChannelDeleted(String message) {
         try {
             ChannelDeletedEvent event = objectMapper.readValue(message, ChannelDeletedEvent.class);
