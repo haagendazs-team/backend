@@ -7,23 +7,30 @@ spring:
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
 
-  r2dbc:
-    url: r2dbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
-    properties:
-      schema: chat
-    pool:
-      initial-size: ${R2DBC_POOL_INITIAL:2}
-      max-size: ${R2DBC_POOL_MAX:5}
+    driver-class-name: org.postgresql.Driver
 
-  flyway:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
-    user: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
-    locations: classpath:db/migration
-    schemas: chat
-    table: flyway_schema_history
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: chat
+        format_sql: true
+        hbm2ddl.create_namespaces: true
+    show-sql: true
+
+#  flyway:
+#    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
+#    user: ${POSTGRES_USER}
+#    password: ${POSTGRES_PASSWORD}
+#    locations: classpath:db/migration
+#    schemas: chat
+#    table: flyway_schema_history
 
   data:
     redis:
@@ -38,6 +45,9 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 management:
   endpoints:
@@ -50,6 +60,7 @@ management:
 
 eureka:
   client:
+    enabled: false #로컬테스트를 위해 잠시 false
     service-url:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:

@@ -18,6 +18,12 @@ scrape_configs:
       - targets:
           - host.docker.internal:8081
 
+  - job_name: chat
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - host.docker.internal:8085
+
   - job_name: payment
     metrics_path: /actuator/prometheus
     static_configs:
