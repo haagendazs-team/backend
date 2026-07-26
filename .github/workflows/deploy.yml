@@ -50,7 +50,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::149471049879:role/haagendazs-github-deploy-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -64,7 +64,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           IMAGE="$REGISTRY/$PROJECT/$SERVICE:${SHA::12}"
-          docker build -t "$IMAGE" -f "$SERVICE/Dockerfile" "$SERVICE"
+          docker build --platform linux/amd64 -t "$IMAGE" -f "$SERVICE/Dockerfile" "$SERVICE"
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
