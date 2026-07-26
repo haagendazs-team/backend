@@ -10,7 +10,7 @@ on:
       environment:
         description: '배포 환경 (dev / staging / prod)'
         required: false
-        default: prod
+        default: dev
 
 permissions:
   contents: read

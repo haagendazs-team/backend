@@ -9,7 +9,7 @@ on:
       environment:
         required: false
         type: string
-        default: prod
+        default: dev
 
 permissions:
   id-token: write
