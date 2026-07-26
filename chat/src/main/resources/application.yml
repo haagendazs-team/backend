@@ -63,6 +63,4 @@ eureka:
     service-url:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
-    prefer-ip-address: true
-    ip-address: ${EUREKA_INSTANCE_IP_ADDRESS:}
-    hostname: ${EUREKA_INSTANCE_HOSTNAME:}
+    prefer-ip-address: false
