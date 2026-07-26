@@ -1,0 +1,1392 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Haagendazs MSA - ECS Fargate, RDS, ElastiCache, Kafka EC2 (KRaft)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: RDS master password
+
+  SlackWebhookUrl:
+    Type: String
+    NoEcho: true
+    Description: Slack Incoming Webhook URL for notifications
+
+  RedisPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Redis auth token
+
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT signing secret
+
+  ConfigGitUri:
+    Type: String
+    Description: Git URI for config-server
+
+  GithubConfigServer:
+    Type: String
+    Description: GitHub token for config-server
+
+Resources:
+  # ============================================================================
+  # VPC
+  # ============================================================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-vpc-${Environment}
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-public-1-${Environment}
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-public-2-${Environment}
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.0.2.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-private-1-${Environment}
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.0.4.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-private-2-${Environment}
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  DefaultPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  # ============================================================================
+  # 보안 그룹
+  # ============================================================================
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB inbound 80/443
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-alb-sg-${Environment}
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Fargate tasks
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-ecs-sg-${Environment}
+
+  # ALB → gateway(8080)
+  ECSIngressFromALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+  # ECS → ECS (서비스 간 통신, 전체 포트)
+  ECSIngressFromECS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
+
+  KafkaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Kafka EC2 broker
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9092
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 29092
+          ToPort: 29092
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-kafka-sg-${Environment}
+
+  PostgreSQLSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL EC2 instances
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-postgres-sg-${Environment}
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ElastiCache Redis
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-redis-sg-${Environment}
+
+  # ============================================================================
+  # PostgreSQL EC2 — 서비스별 t3.micro (최저 비용)
+  # ============================================================================
+  MemberPostgresInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: t3.micro
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      SecurityGroupIds:
+        - !Ref PostgreSQLSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          dnf install -y postgresql15-server
+          postgresql-setup --initdb
+          sed -i "s|host    all             all             127.0.0.1/32            ident|host    all             all             0.0.0.0/0               md5|" /var/lib/pgsql/data/pg_hba.conf
+          echo "listen_addresses = '*'" >> /var/lib/pgsql/data/postgresql.conf
+          systemctl enable postgresql
+          systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${DBPassword}';"
+          sudo -u postgres psql -c "CREATE DATABASE haagendazs;"
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-member-postgres-${Environment}
+
+  PaymentPostgresInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: t3.micro
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      SecurityGroupIds:
+        - !Ref PostgreSQLSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          dnf install -y postgresql15-server
+          postgresql-setup --initdb
+          sed -i "s|host    all             all             127.0.0.1/32            ident|host    all             all             0.0.0.0/0               md5|" /var/lib/pgsql/data/pg_hba.conf
+          echo "listen_addresses = '*'" >> /var/lib/pgsql/data/postgresql.conf
+          systemctl enable postgresql
+          systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${DBPassword}';"
+          sudo -u postgres psql -c "CREATE DATABASE haagendazs;"
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-payment-postgres-${Environment}
+
+  ChatPostgresInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: t3.micro
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      SecurityGroupIds:
+        - !Ref PostgreSQLSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          dnf install -y postgresql15-server
+          postgresql-setup --initdb
+          sed -i "s|host    all             all             127.0.0.1/32            ident|host    all             all             0.0.0.0/0               md5|" /var/lib/pgsql/data/pg_hba.conf
+          echo "listen_addresses = '*'" >> /var/lib/pgsql/data/postgresql.conf
+          systemctl enable postgresql
+          systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${DBPassword}';"
+          sudo -u postgres psql -c "CREATE DATABASE haagendazs;"
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-chat-postgres-${Environment}
+
+  NotificationPostgresInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: t3.micro
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      SecurityGroupIds:
+        - !Ref PostgreSQLSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 10
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          dnf install -y postgresql15-server
+          postgresql-setup --initdb
+          sed -i "s|host    all             all             127.0.0.1/32            ident|host    all             all             0.0.0.0/0               md5|" /var/lib/pgsql/data/pg_hba.conf
+          echo "listen_addresses = '*'" >> /var/lib/pgsql/data/postgresql.conf
+          systemctl enable postgresql
+          systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD '${DBPassword}';"
+          sudo -u postgres psql -c "CREATE DATABASE haagendazs;"
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-notification-postgres-${Environment}
+
+  # ============================================================================
+  # ElastiCache Redis
+  # ============================================================================
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: haagendazs Redis subnet group
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  RedisCluster:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: haagendazs Redis
+      AutomaticFailoverEnabled: false
+      CacheNodeType: cache.t3.micro
+      Engine: redis
+      EngineVersion: '7.1'
+      NumCacheClusters: 1
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-redis-${Environment}
+
+  # ============================================================================
+  # Kafka EC2 (KRaft, 4.0.0) — SSM으로 접속, SSH 없음
+  # ============================================================================
+  SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub haagendazs-ssm-role-${Environment}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref SSMRole
+
+  KafkaInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      # 서울 리전 Amazon Linux 2023 최신 AMI (동적 참조)
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      InstanceType: t3.medium
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      # KeyName 없음 — SSM Session Manager로만 접속
+      SecurityGroupIds:
+        - !Ref KafkaSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -e
+          yum update -y
+          yum install -y java-21-amazon-corretto wget
+
+          cd /opt
+          wget -q https://downloads.apache.org/kafka/4.0.0/kafka_2.13-4.0.0.tgz
+          tar -xzf kafka_2.13-4.0.0.tgz
+          mv kafka_2.13-4.0.0 kafka
+          rm kafka_2.13-4.0.0.tgz
+
+          PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+          mkdir -p /var/lib/kafka/data
+
+          cat > /opt/kafka/config/kraft/server.properties <<EOF
+          node.id=1
+          process.roles=broker,controller
+          listeners=INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+          advertised.listeners=INTERNAL://${PRIVATE_IP}:29092,EXTERNAL://${PRIVATE_IP}:9092
+          listener.security.protocol.map=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+          inter.broker.listener.name=INTERNAL
+          controller.listener.names=CONTROLLER
+          controller.quorum.voters=1@localhost:9093
+          log.dirs=/var/lib/kafka/data
+          auto.create.topics.enable=false
+          offsets.topic.replication.factor=1
+          transaction.state.log.replication.factor=1
+          transaction.state.log.min.isr=1
+          EOF
+
+          CLUSTER_ID=$(/opt/kafka/bin/kafka-storage.sh random-uuid)
+          /opt/kafka/bin/kafka-storage.sh format -t "$CLUSTER_ID" \
+            -c /opt/kafka/config/kraft/server.properties
+
+          cat > /etc/systemd/system/kafka.service <<EOF
+          [Unit]
+          Description=Apache Kafka 4.0.0 KRaft
+          After=network.target
+
+          [Service]
+          Type=simple
+          Environment=KAFKA_HEAP_OPTS=-Xmx512m -Xms256m
+          ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
+          ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          systemctl daemon-reload
+          systemctl enable kafka
+          systemctl start kafka
+
+          sleep 15
+
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+            --create --topic member.notif.push.v1 --partitions 3 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+            --create --topic chat.notif.push.v1 --partitions 3 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+            --create --topic payment.notif.push.v1 --partitions 3 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+            --create --topic member.notif.email-cert.v1 --partitions 1 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+            --create --topic member.created.v1 --partitions 3 --replication-factor 1
+      Tags:
+        - Key: Name
+          Value: !Sub haagendazs-kafka-${Environment}
+
+  # ============================================================================
+  # ECR 리포지터리
+  # ============================================================================
+  GatewayRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/gateway
+      EmptyOnDelete: true
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  ConfigServerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/config-server
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  DiscoveryRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/discovery
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  MemberRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/member
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  PaymentRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/payment
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  ChatRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/chat
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  NotificationRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: haagendazs/notification
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}'
+
+  # ============================================================================
+  # ALB
+  # ============================================================================
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub haagendazs-alb-${Environment}
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+
+  GatewayTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub haagendazs-gateway-tg-${Environment}
+      Port: 8080
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: /actuator/health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+
+  ALBListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref GatewayTargetGroup
+
+  # ============================================================================
+  # ECS 클러스터 + 공통 역할
+  # ============================================================================
+  ServiceNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: !Sub haagendazs.local
+      Vpc: !Ref VPC
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub haagendazs-cluster-${Environment}
+      CapacityProviders:
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+      ServiceConnectDefaults:
+        Namespace: !Ref ServiceNamespace
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub haagendazs-ecs-execution-role-${Environment}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # ============================================================================
+  # CloudWatch 로그 그룹 (서비스별)
+  # ============================================================================
+  LogGroupGateway:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-gateway-${Environment}
+      RetentionInDays: 7
+
+  LogGroupConfigServer:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-config-server-${Environment}
+      RetentionInDays: 7
+
+  LogGroupDiscovery:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-discovery-${Environment}
+      RetentionInDays: 7
+
+  LogGroupMember:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-member-${Environment}
+      RetentionInDays: 7
+
+  LogGroupPayment:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-payment-${Environment}
+      RetentionInDays: 7
+
+  LogGroupChat:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-chat-${Environment}
+      RetentionInDays: 7
+
+  LogGroupNotification:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/haagendazs-notification-${Environment}
+      RetentionInDays: 7
+
+  # ============================================================================
+  # ECS 태스크 정의 — 7개 서비스
+  # ============================================================================
+
+  # config-server
+  TaskDefConfigServer:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-config-server-${Environment}
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: config-server
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/config-server:latest
+          PortMappings:
+            - ContainerPort: 8888
+              Name: config-server
+          Environment:
+            - Name: CONFIG_GIT_URI
+              Value: !Ref ConfigGitUri
+            - Name: GITHUB_CONFIG_SERVER
+              Value: !Ref GithubConfigServer
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupConfigServer
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # discovery
+  TaskDefDiscovery:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-discovery-${Environment}
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: discovery
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/discovery:latest
+          PortMappings:
+            - ContainerPort: 8761
+              Name: discovery
+          Environment:
+            - Name: EUREKA_SERVER_URI
+              Value: http://localhost:8761/eureka
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupDiscovery
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # gateway
+  TaskDefGateway:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-gateway-${Environment}
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: gateway
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/gateway:latest
+          PortMappings:
+            - ContainerPort: 8080
+          Environment:
+            - Name: REDIS_HOST
+              Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+            - Name: REDIS_PORT
+              Value: '6379'
+            - Name: REDIS_PASSWORD
+              Value: !Ref RedisPassword
+            - Name: JWT_SECRET
+              Value: !Ref JwtSecret
+            - Name: EUREKA_SERVER_URI
+              Value: http://discovery:8761/eureka
+            - Name: CONFIG_SERVER_URI
+              Value: http://config-server:8888
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupGateway
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # member
+  TaskDefMember:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-member-${Environment}
+      Cpu: 2048
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: member
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/member:latest
+          PortMappings:
+            - ContainerPort: 8084
+          Environment:
+            - Name: POSTGRES_HOST
+              Value: !GetAtt MemberPostgresInstance.PrivateIp
+            - Name: POSTGRES_PORT
+              Value: '5432'
+            - Name: POSTGRES_DB
+              Value: haagendazs
+            - Name: POSTGRES_USER
+              Value: postgres
+            - Name: POSTGRES_PASSWORD
+              Value: !Ref DBPassword
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !Sub '${KafkaInstance.PrivateIp}:9092'
+            - Name: JWT_SECRET
+              Value: !Ref JwtSecret
+            - Name: EUREKA_SERVER_URI
+              Value: http://discovery:8761/eureka
+            - Name: CONFIG_SERVER_URI
+              Value: http://config-server:8888
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupMember
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # payment
+  TaskDefPayment:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-payment-${Environment}
+      Cpu: 2048
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: payment
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/payment:latest
+          PortMappings:
+            - ContainerPort: 8083
+          Environment:
+            - Name: POSTGRES_HOST
+              Value: !GetAtt PaymentPostgresInstance.PrivateIp
+            - Name: POSTGRES_PORT
+              Value: '5432'
+            - Name: POSTGRES_DB
+              Value: haagendazs
+            - Name: POSTGRES_USER
+              Value: postgres
+            - Name: POSTGRES_PASSWORD
+              Value: !Ref DBPassword
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !Sub '${KafkaInstance.PrivateIp}:9092'
+            - Name: EUREKA_SERVER_URI
+              Value: http://discovery:8761/eureka
+            - Name: CONFIG_SERVER_URI
+              Value: http://config-server:8888
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupPayment
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # chat
+  TaskDefChat:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-chat-${Environment}
+      Cpu: 2048
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: chat
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/chat:latest
+          PortMappings:
+            - ContainerPort: 8085
+          Environment:
+            - Name: POSTGRES_HOST
+              Value: !GetAtt ChatPostgresInstance.PrivateIp
+            - Name: POSTGRES_PORT
+              Value: '5432'
+            - Name: POSTGRES_DB
+              Value: haagendazs
+            - Name: POSTGRES_USER
+              Value: postgres
+            - Name: POSTGRES_PASSWORD
+              Value: !Ref DBPassword
+            - Name: REDIS_HOST
+              Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+            - Name: REDIS_PORT
+              Value: '6379'
+            - Name: REDIS_PASSWORD
+              Value: !Ref RedisPassword
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !Sub '${KafkaInstance.PrivateIp}:9092'
+            - Name: EUREKA_SERVER_URI
+              Value: http://discovery:8761/eureka
+            - Name: CONFIG_SERVER_URI
+              Value: http://config-server:8888
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -Xmx256m
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupChat
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # notification (4GB, ZGC, ulimits)
+  TaskDefNotification:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub haagendazs-notification-${Environment}
+      Cpu: 2048
+      Memory: 4096
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: notification
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/haagendazs/notification:latest
+          PortMappings:
+            - ContainerPort: 8081
+          Ulimits:
+            - Name: nofile
+              SoftLimit: 65535
+              HardLimit: 65535
+          Environment:
+            - Name: POSTGRES_HOST
+              Value: !GetAtt NotificationPostgresInstance.PrivateIp
+            - Name: POSTGRES_PORT
+              Value: '5432'
+            - Name: POSTGRES_DB
+              Value: haagendazs
+            - Name: POSTGRES_USER
+              Value: postgres
+            - Name: POSTGRES_PASSWORD
+              Value: !Ref DBPassword
+            - Name: REDIS_HOST
+              Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+            - Name: REDIS_PORT
+              Value: '6379'
+            - Name: REDIS_PASSWORD
+              Value: !Ref RedisPassword
+            - Name: KAFKA_BOOTSTRAP_SERVERS
+              Value: !Sub '${KafkaInstance.PrivateIp}:9092'
+            - Name: EUREKA_SERVER_URI
+              Value: http://discovery:8761/eureka
+            - Name: CONFIG_SERVER_URI
+              Value: http://config-server:8888
+            - Name: JAVA_TOOL_OPTIONS
+              Value: -XX:MaxMetaspaceSize=256m -Xmx2g -XX:SoftMaxHeapSize=1800m -XX:+UseZGC -Dio.netty.maxDirectMemory=1073741824
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroupNotification
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ============================================================================
+  # ECS 서비스 — 7개
+  # ============================================================================
+  ServiceConfigServer:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub haagendazs-config-server-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefConfigServer
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+        Services:
+          - PortName: config-server
+            ClientAliases:
+              - Port: 8888
+                DnsName: config-server
+
+  ServiceDiscovery:
+    Type: AWS::ECS::Service
+    DependsOn: ServiceConfigServer
+    Properties:
+      ServiceName: !Sub haagendazs-discovery-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefDiscovery
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+        Services:
+          - PortName: discovery
+            ClientAliases:
+              - Port: 8761
+                DnsName: discovery
+
+  ServiceGateway:
+    Type: AWS::ECS::Service
+    DependsOn: [ALBListenerHTTP, ServiceDiscovery]
+    Properties:
+      ServiceName: !Sub haagendazs-gateway-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefGateway
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: gateway
+          ContainerPort: 8080
+          TargetGroupArn: !Ref GatewayTargetGroup
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+
+  ServiceMember:
+    Type: AWS::ECS::Service
+    DependsOn: ServiceDiscovery
+    Properties:
+      ServiceName: !Sub haagendazs-member-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefMember
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+
+  ServicePayment:
+    Type: AWS::ECS::Service
+    DependsOn: ServiceDiscovery
+    Properties:
+      ServiceName: !Sub haagendazs-payment-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefPayment
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+
+  ServiceChat:
+    Type: AWS::ECS::Service
+    DependsOn: ServiceDiscovery
+    Properties:
+      ServiceName: !Sub haagendazs-chat-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefChat
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+
+  ServiceNotification:
+    Type: AWS::ECS::Service
+    DependsOn: ServiceDiscovery
+    Properties:
+      ServiceName: !Sub haagendazs-notification-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefNotification
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: !Ref ServiceNamespace
+
+  # ============================================================================
+  # 스케줄링 — 평일 14:00~18:00 KST (UTC 05:00~09:00) 만 동작
+  # ============================================================================
+
+  # Lambda 실행 역할 (스케줄러 + 스택 삭제 공용)
+  SchedulerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub haagendazs-scheduler-role-${Environment}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SchedulerPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                Resource: '*'
+        - PolicyName: StackDeletionPolicy
+          PolicyDocument:
+            Statement:
+              # delete-stack은 스택 내 모든 리소스를 삭제하므로 광범위 권한 필요
+              - Effect: Allow
+                Action:
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackResources
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:*
+                  - ecs:*
+                  - rds:*
+                  - elasticache:*
+                  - elasticloadbalancing:*
+                  - ecr:*
+                  - logs:*
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:DeleteInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - events:DeleteRule
+                  - events:RemoveTargets
+                  - lambda:DeleteFunction
+                  - lambda:RemovePermission
+                Resource: '*'
+
+  # Lambda — START/STOP 스케줄러 (Slack 알림 포함)
+  SchedulerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub haagendazs-scheduler-${Environment}
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt SchedulerLambdaRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          CLUSTER: !Ref ECSCluster
+          KAFKA_INSTANCE: !Ref KafkaInstance
+          POSTGRES_INSTANCES: !Sub >-
+            ${MemberPostgresInstance},
+            ${PaymentPostgresInstance},
+            ${ChatPostgresInstance},
+            ${NotificationPostgresInstance}
+          REGION: !Ref AWS::Region
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
+          SERVICES: !Sub >-
+            haagendazs-config-server-${Environment},
+            haagendazs-discovery-${Environment},
+            haagendazs-gateway-${Environment},
+            haagendazs-member-${Environment},
+            haagendazs-payment-${Environment},
+            haagendazs-chat-${Environment},
+            haagendazs-notification-${Environment}
+      Code:
+        ZipFile: |
+          import boto3, os, json
+          from urllib.request import urlopen, Request
+
+          def notify_slack(webhook_url, message):
+              req = Request(webhook_url, data=json.dumps({'text': message}).encode(), method='POST')
+              req.add_header('Content-Type', 'application/json')
+              with urlopen(req, timeout=5) as res:
+                  return res.status
+
+          def handler(event, context):
+              region       = os.environ['REGION']
+              cluster      = os.environ['CLUSTER']
+              services     = [s.strip() for s in os.environ['SERVICES'].split(',')]
+              kafka_id     = os.environ['KAFKA_INSTANCE']
+              postgres_ids = [s.strip() for s in os.environ['POSTGRES_INSTANCES'].split(',')]
+              webhook      = os.environ.get('SLACK_WEBHOOK_URL', '')
+              action       = event['action']
+
+              ecs = boto3.client('ecs', region_name=region)
+              ec2 = boto3.client('ec2', region_name=region)
+
+              desired = 1 if action == 'start' else 0
+
+              for svc in services:
+                  ecs.update_service(cluster=cluster, service=svc, desiredCount=desired)
+                  print(f'ECS {svc} desiredCount={desired}')
+
+              all_ec2_ids = [kafka_id] + postgres_ids
+              if action == 'start':
+                  ec2.start_instances(InstanceIds=all_ec2_ids)
+                  msg = '*[haagendazs]* 서비스 시작 (평일 14:00 KST) — ECS 7개 / Kafka / PostgreSQL EC2 가동'
+              else:
+                  ec2.stop_instances(InstanceIds=all_ec2_ids)
+                  msg = '*[haagendazs]* 서비스 종료 (평일 18:00 KST) — ECS 0개 / Kafka / PostgreSQL EC2 중단'
+
+              print(f'EC2 {action} 완료: {all_ec2_ids}')
+              if webhook:
+                  notify_slack(webhook, msg)
+
+              return {'status': 'ok', 'action': action}
+
+  # Lambda — 2026-07-29 18:00 KST 스택 전체 삭제
+  StackDeletionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub haagendazs-stack-deletion-${Environment}
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt SchedulerLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          STACK_NAME: !Ref AWS::StackName
+          REGION: !Ref AWS::Region
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
+      Code:
+        ZipFile: |
+          import boto3, os, json
+          from urllib.request import urlopen, Request
+
+          def notify_slack(webhook_url, message):
+              req = Request(webhook_url, data=json.dumps({'text': message}).encode(), method='POST')
+              req.add_header('Content-Type', 'application/json')
+              with urlopen(req, timeout=5) as res:
+                  return res.status
+
+          def handler(event, context):
+              region     = os.environ['REGION']
+              stack_name = os.environ['STACK_NAME']
+              webhook    = os.environ.get('SLACK_WEBHOOK_URL', '')
+
+              cfn = boto3.client('cloudformation', region_name=region)
+              cfn.delete_stack(StackName=stack_name)
+              print(f'delete-stack 요청 완료: {stack_name}')
+
+              if webhook:
+                  notify_slack(webhook,
+                      f'*[haagendazs]* 스택 삭제 시작 — `{stack_name}` (포트폴리오 운영 종료)')
+
+              return {'status': 'ok', 'stack': stack_name}
+
+  # EventBridge — 평일 05:00 UTC (14:00 KST) START
+  ScheduleStart:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub haagendazs-start-schedule-${Environment}
+      ScheduleExpression: 'cron(0 5 ? * MON-FRI *)'
+      State: ENABLED
+      Targets:
+        - Id: StartLambda
+          Arn: !GetAtt SchedulerFunction.Arn
+          Input: '{"action": "start"}'
+
+  ScheduleStartPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchedulerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduleStart.Arn
+
+  # EventBridge — 평일 09:00 UTC (18:00 KST) STOP
+  ScheduleStop:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub haagendazs-stop-schedule-${Environment}
+      ScheduleExpression: 'cron(0 9 ? * MON-FRI *)'
+      State: ENABLED
+      Targets:
+        - Id: StopLambda
+          Arn: !GetAtt SchedulerFunction.Arn
+          Input: '{"action": "stop"}'
+
+  ScheduleStopPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchedulerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduleStop.Arn
+
+  # EventBridge — 2026-07-29 09:00 UTC (18:00 KST) 스택 전체 삭제 (1회성)
+  ScheduleStackDeletion:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub haagendazs-stack-deletion-${Environment}
+      ScheduleExpression: 'cron(0 9 29 7 ? 2026)'
+      State: DISABLED
+      Targets:
+        - Id: StackDeletionLambda
+          Arn: !GetAtt StackDeletionFunction.Arn
+
+  ScheduleStackDeletionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StackDeletionFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduleStackDeletion.Arn
+
+# ============================================================================
+# Outputs
+# ============================================================================
+Outputs:
+  ALBDNSName:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub haagendazs-alb-dns-${Environment}
+
+  MemberPostgresIP:
+    Value: !GetAtt MemberPostgresInstance.PrivateIp
+    Export:
+      Name: !Sub haagendazs-member-postgres-ip-${Environment}
+
+  PaymentPostgresIP:
+    Value: !GetAtt PaymentPostgresInstance.PrivateIp
+    Export:
+      Name: !Sub haagendazs-payment-postgres-ip-${Environment}
+
+  ChatPostgresIP:
+    Value: !GetAtt ChatPostgresInstance.PrivateIp
+    Export:
+      Name: !Sub haagendazs-chat-postgres-ip-${Environment}
+
+  NotificationPostgresIP:
+    Value: !GetAtt NotificationPostgresInstance.PrivateIp
+    Export:
+      Name: !Sub haagendazs-notification-postgres-ip-${Environment}
+
+  RedisEndpoint:
+    Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
+    Export:
+      Name: !Sub haagendazs-redis-endpoint-${Environment}
+
+  KafkaPrivateIP:
+    Value: !GetAtt KafkaInstance.PrivateIp
+    Export:
+      Name: !Sub haagendazs-kafka-ip-${Environment}

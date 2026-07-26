@@ -3,7 +3,7 @@ server:
   netty:
     connection-timeout: 30s
     idle-timeout: 90s
-    worker-count: 16
+    worker-count: 32
 
 spring:
   application:
@@ -20,7 +20,9 @@ spring:
       schema: notification
     pool:
       initial-size: ${R2DBC_POOL_INITIAL:10}
-      max-size: ${R2DBC_POOL_MAX:50}
+      max-size: ${R2DBC_POOL_MAX:100}
+      max-acquire-time: 3s
+      max-idle-time: 10m
 
   # Flyway는 JDBC URL로 별도 동작 (R2DBC URL과 독립적)
   flyway:
@@ -36,6 +38,13 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 2s
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -85,6 +94,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: true
+    ip-address: ${EUREKA_INSTANCE_IP_ADDRESS:}
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:}
 
 notification:
   pel:
