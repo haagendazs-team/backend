@@ -5,6 +5,12 @@ on:
     branches: [ "**" ]
   pull_request:
     branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경 (dev / staging / prod)'
+        required: false
+        default: prod
 
 permissions:
   contents: read
@@ -19,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && !github.event.pull_request)
     outputs:
       modules: ${{ steps.changed.outputs.modules }}
@@ -33,28 +40,32 @@ jobs:
         run: |
           ALL_MODULES="config-server discovery gateway member payment notification chat common"
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE=${{ github.event.pull_request.base.sha }}
-          else
-            BASE=${{ github.event.before }}
-          fi
-
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CHANGED_MODULES="$ALL_MODULES"
           else
-            CHANGED_FILES=$(git diff --name-only "$BASE"...HEAD)
-            echo "Changed files:"
-            echo "$CHANGED_FILES"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE=${{ github.event.pull_request.base.sha }}
+            else
+              BASE=${{ github.event.before }}
+            fi
 
-            if echo "$CHANGED_FILES" | grep -q "^common/"; then
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
               CHANGED_MODULES="$ALL_MODULES"
             else
-              CHANGED_MODULES=""
-              for MODULE in $ALL_MODULES; do
-                if echo "$CHANGED_FILES" | grep -q "^${MODULE}/"; then
-                  CHANGED_MODULES="$CHANGED_MODULES $MODULE"
-                fi
-              done
+              CHANGED_FILES=$(git diff --name-only "$BASE"...HEAD)
+              echo "Changed files:"
+              echo "$CHANGED_FILES"
+
+              if echo "$CHANGED_FILES" | grep -q "^common/"; then
+                CHANGED_MODULES="$ALL_MODULES"
+              else
+                CHANGED_MODULES=""
+                for MODULE in $ALL_MODULES; do
+                  if echo "$CHANGED_FILES" | grep -q "^${MODULE}/"; then
+                    CHANGED_MODULES="$CHANGED_MODULES $MODULE"
+                  fi
+                done
+              fi
             fi
           fi
 
@@ -138,4 +149,21 @@ jobs:
 
       - name: Test ${{ matrix.module }}
         run: ./gradlew :${{ matrix.module }}:test
-# CD off
+
+  # TODO: 배포 테스트 후 develop 브랜치 조건으로 복구
+  deploy:
+    needs: [detect-modules, test]
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-modules.outputs.modules) }}
+        exclude:
+          - module: common
+      fail-fast: false
+    uses: ./.github/workflows/deploy.yml
+    with:
+      service: ${{ matrix.module }}
+      environment: ${{ github.event.inputs.environment || 'dev' }}
+    secrets: inherit
