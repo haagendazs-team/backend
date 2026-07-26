@@ -34,6 +34,7 @@ dependencies {
 
     // Redis (Reactive)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+    implementation 'org.apache.commons:commons-pool2'
 
     // Flyway — R2DBC와 공존 가능, 스키마 마이그레이션 전용 (JDBC URL 별도 설정 필요)
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -63,6 +64,8 @@ dependencies {
 
 
 dependencies {
+    testImplementation 'org.apache.commons:commons-pool2'
+
     // Testcontainers — Kafka / Postgres / Redis (BOM 버전은 Boot 4.0.3이 관리: 2.0.3)
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
