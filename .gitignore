@@ -31,3 +31,5 @@ logs/
 /.superpowers/
 /docs/superpowers/
 /docs/wiki/
+/docs/cloudformation.yml
+/docs/deploy-setup.md
