@@ -64,6 +64,19 @@ spring:
                     redis-rate-limiter.burstCapacity: 40
                     redis-rate-limiter.requestedTokens: 1
 
+            - id: chat-service
+              uri: lb://chat
+              predicates:
+                - Path=/api/chats/**
+              filters:
+                - StripPrefix=2
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 30
+                    redis-rate-limiter.burstCapacity: 60
+                    redis-rate-limiter.requestedTokens: 1
+
 management:
   endpoints:
     web:
