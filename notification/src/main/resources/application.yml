@@ -10,6 +10,10 @@ spring:
     name: notification
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
 
   # R2DBC — 논블로킹 DB 연결 (Netty 이벤트 루프 전용)
   r2dbc:
@@ -94,6 +98,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    ip-address: ${EUREKA_INSTANCE_IP_ADDRESS:}
 
 notification:
   pel:

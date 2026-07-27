@@ -6,6 +6,10 @@ spring:
     name: payment
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}?currentSchema=payment
     username: ${POSTGRES_USER}
@@ -59,6 +63,8 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
     prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    ip-address: ${EUREKA_INSTANCE_IP_ADDRESS:}
 
 payment:
   seed-data:
