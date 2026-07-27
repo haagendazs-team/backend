@@ -151,11 +151,10 @@ jobs:
       - name: Test ${{ matrix.module }}
         run: ./gradlew :${{ matrix.module }}:test
 
-  # TODO: 배포 테스트 후 develop 브랜치 조건으로 복구
   deploy:
     needs: [detect-modules, test]
     if: >
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
       github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
