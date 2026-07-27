@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -227,12 +228,47 @@ class WorkspaceServiceJunitTest {
     void getMyWorkspaces_success_returnsWorkspaceList() {
         when(workspaceMemberRepository.findAllByMemberId(1L))
                 .thenReturn(List.of(TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER)));
-        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceRepository.findAllByIdIn(List.of(1L)))
+                .thenReturn(List.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
 
         List<WorkspaceResult> results = workspaceService.getMyWorkspaces(1L);
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).name()).isEqualTo(WORKSPACE_NAME);
+        verify(workspaceRepository).findAllByIdIn(List.of(1L));
+    }
+
+    @Test
+    @DisplayName("[Happy] 소속 워크스페이스가 여러 개여도 배치 조회로 한 번에 가져온다")
+    void getMyWorkspaces_multiple_usesBatchFind() {
+        when(workspaceMemberRepository.findAllByMemberId(1L))
+                .thenReturn(List.of(
+                        TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER),
+                        TestFixture.workspaceMember(2L, 1L, WorkspaceRole.MEMBER)
+                ));
+        when(workspaceRepository.findAllByIdIn(List.of(1L, 2L)))
+                .thenReturn(List.of(
+                        TestFixture.workspace(1L, "ws-1"),
+                        TestFixture.workspace(2L, "ws-2")
+                ));
+
+        List<WorkspaceResult> results = workspaceService.getMyWorkspaces(1L);
+
+        assertThat(results).extracting(WorkspaceResult::name).containsExactly("ws-1", "ws-2");
+        verify(workspaceRepository).findAllByIdIn(List.of(1L, 2L));
+        verify(workspaceRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("[Happy] 소속 워크스페이스가 없으면 빈 목록을 반환하고 workspace 조회를 하지 않는다")
+    void getMyWorkspaces_empty_returnsEmptyWithoutWorkspaceQuery() {
+        when(workspaceMemberRepository.findAllByMemberId(1L)).thenReturn(List.of());
+
+        List<WorkspaceResult> results = workspaceService.getMyWorkspaces(1L);
+
+        assertThat(results).isEmpty();
+        verify(workspaceRepository, never()).findAllByIdIn(any());
+        verify(workspaceRepository, never()).findById(any());
     }
 
     @Test
@@ -275,6 +311,62 @@ class WorkspaceServiceJunitTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(MemberErrorCode.CANNOT_INVITE_SELF);
+    }
+
+    @Test
+    @DisplayName("[Exception] 초대 역할로 OWNER를 지정하면 INVALID_INVITE_ROLE 예외가 발생한다")
+    void inviteMember_ownerRole_throwsException() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        Member target = TestFixture.member(2L, INVITE_EMAIL, "encoded", INVITE_NICKNAME);
+
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        when(memberRepository.findByEmail(INVITE_EMAIL)).thenReturn(Optional.of(target));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> workspaceService.inviteMember(1L, 1L, INVITE_EMAIL, "OWNER"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.INVALID_INVITE_ROLE);
+    }
+
+    @Test
+    @DisplayName("[Exception] 초대 역할이 잘못된 값이면 INVALID_INVITE_ROLE 예외가 발생한다")
+    void inviteMember_invalidRole_throwsException() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        Member target = TestFixture.member(2L, INVITE_EMAIL, "encoded", INVITE_NICKNAME);
+
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        when(memberRepository.findByEmail(INVITE_EMAIL)).thenReturn(Optional.of(target));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> workspaceService.inviteMember(1L, 1L, INVITE_EMAIL, "SUPERUSER"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(MemberErrorCode.INVALID_INVITE_ROLE);
+    }
+
+    @Test
+    @DisplayName("[Happy] 초대 역할로 ADMIN을 지정하면 ADMIN으로 초대된다")
+    void inviteMember_adminRole_success() {
+        WorkspaceMember owner = TestFixture.workspaceMember(1L, 1L, WorkspaceRole.OWNER);
+        Member target = TestFixture.member(2L, INVITE_EMAIL, "encoded", INVITE_NICKNAME);
+
+        when(workspaceRepository.findById(1L)).thenReturn(Optional.of(TestFixture.workspace(1L, WORKSPACE_NAME)));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 1L)).thenReturn(Optional.of(owner));
+        when(memberRepository.findByEmail(INVITE_EMAIL)).thenReturn(Optional.of(target));
+        when(workspaceMemberRepository.findByWorkspaceIdAndMemberId(1L, 2L)).thenReturn(Optional.empty());
+        when(workspaceMemberRepository.save(any(WorkspaceMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            Runnable action = invocation.getArgument(0);
+            action.run();
+            return null;
+        }).when(afterCommitExecutor).runAfterCommit(any(Runnable.class));
+
+        WorkspaceMemberResult result = workspaceService.inviteMember(1L, 1L, INVITE_EMAIL, "ADMIN");
+
+        assertThat(result.role()).isEqualTo("ADMIN");
     }
 
     @Test

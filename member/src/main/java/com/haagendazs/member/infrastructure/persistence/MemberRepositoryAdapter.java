@@ -32,4 +32,9 @@ public class MemberRepositoryAdapter implements MemberRepository {
     public boolean existsByEmail(String email) {
         return jpaRepository.existsByEmail(email);
     }
+
+    @Override
+    public boolean existsActiveById(Long memberId) {
+        return jpaRepository.existsByMemberIdAndIsActiveTrue(memberId);
+    }
 }

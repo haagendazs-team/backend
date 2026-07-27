@@ -88,15 +88,17 @@ class MemberApiIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("[Exception] 탈퇴한 회원은 내 프로필 조회 시 403 Forbidden을 반환한다")
-    void getMyProfile_afterWithdraw_returnsForbidden() throws Exception {
+    @DisplayName("[Exception] 탈퇴한 회원은 Access JWT가 남아 있어도 401 Unauthorized를 반환한다")
+    void getMyProfile_afterWithdraw_returnsUnauthorized() throws Exception {
         mockMvc.perform(delete("/members/me")
                         .header("Authorization", "Bearer " + tokens.accessToken()))
                 .andExpect(status().isNoContent());
 
+        // 필터에서 비활성 회원은 인증 컨텍스트를 만들지 않음 → 보호 API는 401
         mockMvc.perform(get("/members/me")
                         .header("Authorization", "Bearer " + tokens.accessToken()))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("M004"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("C004"));
     }
 }

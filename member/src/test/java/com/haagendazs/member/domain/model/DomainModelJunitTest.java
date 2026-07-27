@@ -94,6 +94,14 @@ class DomainModelJunitTest {
     }
 
     @Test
+    @DisplayName("[Happy] WorkspaceRole.isAssignableOnInvite는 ADMIN/MEMBER만 true를 반환한다")
+    void workspaceRole_isAssignableOnInvite() {
+        assertThat(WorkspaceRole.OWNER.isAssignableOnInvite()).isFalse();
+        assertThat(WorkspaceRole.ADMIN.isAssignableOnInvite()).isTrue();
+        assertThat(WorkspaceRole.MEMBER.isAssignableOnInvite()).isTrue();
+    }
+
+    @Test
     @DisplayName("[Happy] WorkspaceMember.assign는 역할 문자열을 저장한다")
     void workspaceMember_assign_storesRoleValue() {
         WorkspaceMember workspaceMember = WorkspaceMember.assign(1L, 2L, WorkspaceRole.ADMIN);

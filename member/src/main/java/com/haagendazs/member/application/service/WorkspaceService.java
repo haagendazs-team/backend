@@ -21,6 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -50,11 +53,26 @@ public class WorkspaceService {
     }
 
     public List<WorkspaceResult> getMyWorkspaces(Long memberId) {
-        return workspaceMemberRepository.findAllByMemberId(memberId).stream()
+        List<WorkspaceMember> memberships = workspaceMemberRepository.findAllByMemberId(memberId);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> workspaceIds = memberships.stream()
                 .map(WorkspaceMember::getWorkspaceId)
-                .map(workspaceId -> workspaceRepository.findById(workspaceId)
-                        .orElseThrow(() -> new BusinessException(MemberErrorCode.WORKSPACE_NOT_FOUND)))
-                .map(WorkspaceResult::from)
+                .toList();
+
+        Map<Long, Workspace> workspaceById = workspaceRepository.findAllByIdIn(workspaceIds).stream()
+                .collect(Collectors.toMap(Workspace::getWorkspaceId, Function.identity()));
+
+        return workspaceIds.stream()
+                .map(workspaceId -> {
+                    Workspace workspace = workspaceById.get(workspaceId);
+                    if (workspace == null) {
+                        throw new BusinessException(MemberErrorCode.WORKSPACE_NOT_FOUND);
+                    }
+                    return WorkspaceResult.from(workspace);
+                })
                 .toList();
     }
 
@@ -101,7 +119,7 @@ public class WorkspaceService {
             throw new BusinessException(MemberErrorCode.ALREADY_WORKSPACE_MEMBER);
         }
 
-        WorkspaceRole workspaceRole = role != null ? WorkspaceRole.valueOf(role) : WorkspaceRole.MEMBER;
+        WorkspaceRole workspaceRole = resolveInviteRole(role);
         WorkspaceMember invited = workspaceMemberRepository.save(
                 WorkspaceMember.assign(workspaceId, targetMember.getMemberId(), workspaceRole)
         );
@@ -146,6 +164,22 @@ public class WorkspaceService {
         if (!workspaceMember.getWorkspaceRole().canManageWorkspace()) {
             throw new BusinessException(MemberErrorCode.INSUFFICIENT_PERMISSION);
         }
+    }
+
+    private WorkspaceRole resolveInviteRole(String role) {
+        if (role == null || role.isBlank()) {
+            return WorkspaceRole.MEMBER;
+        }
+        final WorkspaceRole workspaceRole;
+        try {
+            workspaceRole = WorkspaceRole.valueOf(role);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(MemberErrorCode.INVALID_INVITE_ROLE);
+        }
+        if (!workspaceRole.isAssignableOnInvite()) {
+            throw new BusinessException(MemberErrorCode.INVALID_INVITE_ROLE);
+        }
+        return workspaceRole;
     }
 
     private Member getMemberOrThrow(Long memberId) {

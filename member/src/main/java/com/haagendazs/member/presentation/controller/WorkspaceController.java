@@ -120,6 +120,7 @@ public class WorkspaceController {
 
     public record InviteMemberRequest(
             @NotBlank String email,
+            /** MEMBER 또는 ADMIN. null이면 MEMBER. OWNER는 불가. */
             String role
     ) {
     }

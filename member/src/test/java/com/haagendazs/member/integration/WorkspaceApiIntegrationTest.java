@@ -155,6 +155,25 @@ class WorkspaceApiIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.code").value("M010"));
     }
 
+    @Test
+    @DisplayName("[Exception] 초대 시 OWNER 역할을 지정하면 400 Bad Request를 반환한다")
+    void inviteMember_ownerRole_returnsBadRequest() throws Exception {
+        Long workspaceId = createWorkspace(ownerTokens.accessToken(), "owner-invite-blocked");
+
+        mockMvc.perform(post("/workspaces/{workspaceId}/members", workspaceId)
+                        .header("Authorization", "Bearer " + ownerTokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "example2@example.com",
+                                  "role": "OWNER"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("M016"));
+    }
+
     private Long createWorkspace(String accessToken, String name) throws Exception {
         String createResponse = mockMvc.perform(post("/workspaces")
                         .header("Authorization", "Bearer " + accessToken)

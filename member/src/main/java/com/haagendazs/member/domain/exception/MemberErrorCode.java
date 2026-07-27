@@ -23,7 +23,8 @@ public enum MemberErrorCode implements ErrorCode {
     NOT_CHANNEL_MEMBER(HttpStatus.FORBIDDEN, "M012", "채널 멤버가 아닙니다."),
     ALREADY_CHANNEL_MEMBER(HttpStatus.CONFLICT, "M013", "이미 채널에 참여 중입니다."),
     CANNOT_INVITE_SELF(HttpStatus.BAD_REQUEST, "M014", "자기 자신을 초대할 수 없습니다."),
-    TARGET_MEMBER_NOT_IN_WORKSPACE(HttpStatus.BAD_REQUEST, "M015", "대상 멤버가 워크스페이스에 속해 있지 않습니다.");
+    TARGET_MEMBER_NOT_IN_WORKSPACE(HttpStatus.BAD_REQUEST, "M015", "대상 멤버가 워크스페이스에 속해 있지 않습니다."),
+    INVALID_INVITE_ROLE(HttpStatus.BAD_REQUEST, "M016", "초대 역할은 MEMBER 또는 ADMIN만 가능합니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
