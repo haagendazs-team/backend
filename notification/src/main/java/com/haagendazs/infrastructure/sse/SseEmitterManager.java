@@ -72,7 +72,7 @@ public class SseEmitterManager implements SseNotificationPort {
 
         log.info("SSE subscribed memberId={} instanceId={}", memberId, instanceId);
 
-        return Flux.concat(replay, sink.asFlux())
+        return Flux.concat(Flux.just(PING_EVENT), replay, sink.asFlux())
                 .timeout(Duration.ofMillis( properties.sse().timeoutMs() ))
                 .publishOn(Schedulers.boundedElastic())
                 .doFinally(signal -> {
@@ -128,7 +128,7 @@ public class SseEmitterManager implements SseNotificationPort {
         }
     }
 
-    @Scheduled(fixedRate = 60_000)
+    @Scheduled(fixedRate = 30_000)
     public void sendHeartbeat() {
         int active = sessions.size();
         sessions.forEach((memberId, session) ->

@@ -79,22 +79,27 @@ public class ReactiveRedisStreamEventPublisher {
      * k6 bulk 발행 전용 — envelope JSON에 eventTypeCode 필드를 top-level에 주입해 Stream에 XADD.
      * StreamSubscriptionManager의 PayloadParser.extractEventTypeCode() 가 이 필드를 읽는다.
      */
+    private static final int K6_XADD_CHUNK = 200;
+    private static final int K6_XADD_CONCURRENCY = 8;
+
     public Mono<Void> publishWithEventTypeCode(List<?> envelopes, String eventTypeCode) {
         if (envelopes.isEmpty()) {
             return Mono.empty();
         }
         long startNs = System.nanoTime();
         return Flux.fromIterable(envelopes)
-                .flatMap(envelope -> {
-                    try {
-                        ObjectNode node = objectMapper.valueToTree(envelope);
-                        node.put("eventTypeCode", eventTypeCode);
-                        String json = objectMapper.writeValueAsString(node);
-                        return redisTemplate.opsForStream().add(RedisStreamsConfig.STREAM_KEY, Map.of(PAYLOAD_KEY, json));
-                    } catch (Exception e) {
-                        return Mono.error(new IllegalArgumentException("k6 bulk payload 직렬화 실패", e));
-                    }
-                }, 16)
+                .buffer(K6_XADD_CHUNK)
+                .concatMap(chunk -> Flux.fromIterable(chunk)
+                        .flatMap(envelope -> {
+                            try {
+                                ObjectNode node = objectMapper.valueToTree(envelope);
+                                node.put("eventTypeCode", eventTypeCode);
+                                String json = objectMapper.writeValueAsString(node);
+                                return redisTemplate.opsForStream().add(RedisStreamsConfig.STREAM_KEY, Map.of(PAYLOAD_KEY, json));
+                            } catch (Exception e) {
+                                return Mono.error(new IllegalArgumentException("k6 bulk payload 직렬화 실패", e));
+                            }
+                        }, K6_XADD_CONCURRENCY))
                 .then()
                 .doOnSuccess(v -> {
                     publishDuration.record(System.nanoTime() - startNs, java.util.concurrent.TimeUnit.NANOSECONDS);

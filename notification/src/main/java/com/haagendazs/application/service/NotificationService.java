@@ -55,14 +55,7 @@ public class NotificationService {
     }
 
     public Flux<ServerSentEvent<Object>> subscribe(Long memberId, Long lastEventId) {
-        Mono<Void> cacheWarmup = settingCachePort.isCached(memberId)
-                .filter(cached -> !cached)
-                .flatMap(ignored -> settingEntryRepository.findAllByMemberId(memberId)
-                        .collectList()
-                        .flatMap(entries -> settingCachePort.putAll(memberId, entries)));
-
-        return cacheWarmup
-                .thenMany(sseNotificationPort.subscribe(memberId, buildReplay(memberId, lastEventId)));
+        return sseNotificationPort.subscribe(memberId, buildReplay(memberId, lastEventId));
     }
 
     private Flux<ServerSentEvent<Object>> buildReplay(Long memberId, Long lastEventId) {

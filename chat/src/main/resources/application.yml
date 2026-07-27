@@ -6,7 +6,10 @@ spring:
     name: chat
   config:
     import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
-
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 10.0
 
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:haagendazs}
@@ -60,8 +63,9 @@ management:
 
 eureka:
   client:
-    enabled: false #로컬테스트를 위해 잠시 false
     service-url:
       defaultZone: ${EUREKA_SERVER_URI:http://localhost:8761/eureka}
   instance:
-    prefer-ip-address: true
+    prefer-ip-address: false
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    ip-address: ${EUREKA_INSTANCE_IP_ADDRESS:}

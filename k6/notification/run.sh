@@ -103,7 +103,7 @@ cleanup() {
 trap cleanup EXIT
 
 # send / receive: X-Member-Id 직접 연결 — DB seed / 토큰 불필요
-SSE_VUS="${SSE_VUS:-6000}"
+SSE_VUS="${SSE_VUS:-24000}"
 RECEIVER_VUS="${RECEIVER_VUS:-500}"
 
 if [[ "$TARGET" != "sustain-direct" ]] && [[ "$TARGET" != "sse-v2-poc" ]] && \

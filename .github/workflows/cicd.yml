@@ -5,10 +5,17 @@ on:
     branches: [ "**" ]
   pull_request:
     branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경 (dev / staging / prod)'
+        required: false
+        default: dev
 
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -17,11 +24,9 @@ concurrency:
 jobs:
   detect-modules:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'push' && !github.event.pull_request)
     outputs:
       modules: ${{ steps.changed.outputs.modules }}
+      has-modules: ${{ steps.changed.outputs.has-modules }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,40 +38,47 @@ jobs:
         run: |
           ALL_MODULES="config-server discovery gateway member payment notification chat common"
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE=${{ github.event.pull_request.base.sha }}
-          else
-            BASE=${{ github.event.before }}
-          fi
-
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             CHANGED_MODULES="$ALL_MODULES"
           else
-            CHANGED_FILES=$(git diff --name-only "$BASE"...HEAD)
-            echo "Changed files:"
-            echo "$CHANGED_FILES"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE=${{ github.event.pull_request.base.sha }}
+            else
+              BASE=${{ github.event.before }}
+            fi
 
-            if echo "$CHANGED_FILES" | grep -q "^common/"; then
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
               CHANGED_MODULES="$ALL_MODULES"
             else
-              CHANGED_MODULES=""
-              for MODULE in $ALL_MODULES; do
-                if echo "$CHANGED_FILES" | grep -q "^${MODULE}/"; then
-                  CHANGED_MODULES="$CHANGED_MODULES $MODULE"
-                fi
-              done
+              CHANGED_FILES=$(git diff --name-only "$BASE"...HEAD)
+              echo "Changed files:"
+              echo "$CHANGED_FILES"
+
+              if echo "$CHANGED_FILES" | grep -q "^common/"; then
+                CHANGED_MODULES="$ALL_MODULES"
+              else
+                CHANGED_MODULES=""
+                for MODULE in $ALL_MODULES; do
+                  if echo "$CHANGED_FILES" | grep -q "^${MODULE}/"; then
+                    CHANGED_MODULES="$CHANGED_MODULES $MODULE"
+                  fi
+                done
+              fi
             fi
           fi
 
           CHANGED_MODULES=$(echo "$CHANGED_MODULES" | xargs)
           JSON=$(echo "$CHANGED_MODULES" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .)
+          HAS_MODULES=$([ "$JSON" = "[]" ] && echo "false" || echo "true")
           echo "modules=$JSON" >> "$GITHUB_OUTPUT"
+          echo "has-modules=$HAS_MODULES" >> "$GITHUB_OUTPUT"
           echo "Modules to test: $JSON"
 
 
   build:
     runs-on: ubuntu-latest
     needs: detect-modules
+    if: needs.detect-modules.outputs.has-modules == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +116,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: [detect-modules, build]
-    if: needs.detect-modules.outputs.modules != '[]'
+    if: needs.detect-modules.outputs.has-modules == 'true' && needs.build.result == 'success'
     strategy:
       matrix:
         module: ${{ fromJson(needs.detect-modules.outputs.modules) }}
@@ -138,4 +150,26 @@ jobs:
 
       - name: Test ${{ matrix.module }}
         run: ./gradlew :${{ matrix.module }}:test
-# CD off
+
+  deploy:
+    needs: [detect-modules, test]
+    if: |
+      always() &&
+      needs.detect-modules.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      needs.detect-modules.outputs.has-modules == 'true' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.detect-modules.outputs.modules) }}
+        exclude:
+          - module: common
+      fail-fast: false
+    uses: ./.github/workflows/deploy.yml
+    with:
+      service: ${{ matrix.module }}
+      environment: ${{ github.event.inputs.environment || 'dev' }}
+    secrets: inherit
